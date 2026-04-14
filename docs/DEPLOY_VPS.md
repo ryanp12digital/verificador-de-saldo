@@ -63,3 +63,18 @@ tail -f .tmp/monitor_meta_ads.log
 - Token expirado Meta: renovar `META_ACCESS_TOKEN`.
 - Grupo nao recebe: validar `EVOLUTION_INSTANCE`, `EVOLUTION_GROUP_ID` e `EVOLUTION_API_KEY`.
 - Erro de timezone: confirmar `TZ=America/Sao_Paulo` no `.env`.
+
+## EasyPanel (Dockerfile)
+
+Se o deploy for no EasyPanel:
+
+1. Selecione `Dockerfile` como metodo de build.
+2. Caminho do Dockerfile: `Dockerfile`.
+3. Configure as variaveis de ambiente do `.env` no painel.
+4. Opcionalmente, defina:
+   - `CRON_SCHEDULE=0 8,18 * * *`
+   - `ALERT_THRESHOLD=200`
+   - `NEAR_THRESHOLD=120`
+5. Suba o servico.
+
+Observacao: o container executa `supercronic` internamente, entao nao precisa configurar cron do host.

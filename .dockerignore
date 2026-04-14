@@ -1,0 +1,10 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.tmp
+.env
+assets
+agent-transcripts
+mcps

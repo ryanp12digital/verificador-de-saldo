@@ -50,6 +50,27 @@ Projeto inicializado com arquitetura de 3 camadas para separar:
   - `./scripts/setup_vps.sh`
   - `./scripts/install_cron.sh`
 
+## Deploy no EasyPanel (Dockerfile)
+
+- Build method: `Dockerfile`
+- Arquivo: `Dockerfile` na raiz
+- Container mode: app/worker em execucao continua
+- O agendamento roda dentro do container via `supercronic`
+- Variaveis obrigatorias no painel:
+  - `META_ACCESS_TOKEN`
+  - `META_BUSINESS_ID`
+  - `EVOLUTION_SERVER_URL`
+  - `EVOLUTION_API_KEY`
+  - `EVOLUTION_INSTANCE`
+  - `EVOLUTION_GROUP_ID`
+- Variaveis opcionais:
+  - `TZ=America/Sao_Paulo`
+  - `CRON_SCHEDULE=0 8,18 * * *`
+  - `ALERT_THRESHOLD=200`
+  - `NEAR_THRESHOLD=120`
+  - `MAX_RETRIES=3`
+  - `RETRY_DELAY_SECONDS=300`
+
 ## Fluxo recomendado
 
 1. Leia uma diretiva em `directives/`.
