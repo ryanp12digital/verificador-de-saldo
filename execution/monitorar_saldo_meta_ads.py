@@ -84,6 +84,22 @@ def safe_print(text: str) -> None:
         sys.stdout.buffer.write(text.encode("utf-8", errors="replace") + b"\n")
 
 
+def log_info(message: str) -> None:
+    safe_print(f"ℹ️  {message}")
+
+
+def log_success(message: str) -> None:
+    safe_print(f"✅ {message}")
+
+
+def log_warn(message: str) -> None:
+    safe_print(f"⚠️  {message}")
+
+
+def log_error(message: str) -> None:
+    safe_print(f"❌ {message}")
+
+
 def request_with_retry(
     session: requests.Session,
     method: str,
@@ -323,6 +339,7 @@ def send_group_message(
 def main() -> int:
     load_dotenv()
     args = parse_args()
+    log_info("Iniciando rotina de monitoramento de saldo Meta Ads")
 
     try:
         access_token = env_required("META_ACCESS_TOKEN")
@@ -336,12 +353,19 @@ def main() -> int:
         treat_as_cents = os.getenv("META_BALANCE_IS_CENTS", "true").lower() == "true"
         tz_name = os.getenv("TZ", "America/Sao_Paulo").strip() or "America/Sao_Paulo"
     except ValueError as exc:
-        print(f"Erro de configuracao: {exc}")
+        log_error(f"Erro de configuracao: {exc}")
         return 2
+
+    log_info(
+        f"Configuracao carregada | timezone={tz_name} | "
+        f"limite_alerta={args.alert_threshold:.2f} | "
+        f"limite_proximo_100={args.near_threshold:.2f}"
+    )
 
     session = requests.Session()
 
     try:
+        log_info("Consultando contas no Meta Ads...")
         accounts_raw = fetch_accounts(
             session,
             business_id=business_id,
@@ -351,7 +375,7 @@ def main() -> int:
         )
         accounts = normalize_accounts(accounts_raw, treat_as_cents=treat_as_cents)
     except Exception as exc:  # noqa: BLE001
-        print(f"Erro ao consultar contas do Meta Ads: {exc}")
+        log_error(f"Erro ao consultar contas do Meta Ads: {exc}")
         return 1
 
     low_balances = [
@@ -364,11 +388,19 @@ def main() -> int:
         "limite_alerta": args.alert_threshold,
         "limite_proximo_100": args.near_threshold,
     }
-    print(json.dumps(result, ensure_ascii=True, indent=2))
+    log_info("Resumo da varredura:")
+    safe_print(json.dumps(result, ensure_ascii=True, indent=2))
 
     if not low_balances:
-        print("Nenhuma conta com saldo <= limite. Nenhuma mensagem enviada.")
+        log_success("Nenhuma conta abaixo do limite. Nenhuma mensagem enviada ao grupo.")
         return 0
+
+    top_low = sorted(low_balances, key=lambda item: item.balance_brl)[:3]
+    preview = ", ".join(
+        f"{item.name}: R${item.balance_brl:.2f} ({item.balance_source})" for item in top_low
+    )
+    log_warn(f"Contas abaixo do limite detectadas: {len(low_balances)}")
+    log_info(f"Top saldos baixos: {preview}")
 
     message = build_alert_message(
         low_balances,
@@ -378,11 +410,12 @@ def main() -> int:
     )
 
     if args.dry_run:
-        print("\n--- MODO DRY-RUN (mensagem nao enviada) ---")
+        log_info("MODO DRY-RUN ativo. Mensagem sera exibida, sem envio ao grupo.")
         safe_print(message)
         return 0
 
     try:
+        log_info("Enviando alerta para o grupo no WhatsApp...")
         send_group_message(
             session,
             base_url=evolution_base_url,
@@ -394,10 +427,10 @@ def main() -> int:
             retry_delay_seconds=retry_delay_seconds,
         )
     except Exception as exc:  # noqa: BLE001
-        print(f"Erro ao enviar mensagem para o grupo: {exc}")
+        log_error(f"Erro ao enviar mensagem para o grupo: {exc}")
         return 1
 
-    print("Mensagem enviada com sucesso para o grupo.")
+    log_success("Mensagem enviada com sucesso para o grupo.")
     return 0
 
 
