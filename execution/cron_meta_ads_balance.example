@@ -1,0 +1,5 @@
+# Exemplo de CRON para VPS Linux
+# Executa diariamente as 08:00 e 18:00.
+# Ajuste o caminho do projeto.
+
+0 8,18 * * * /caminho/do/projeto/scripts/run_monitor.sh
