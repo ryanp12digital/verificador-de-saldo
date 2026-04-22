@@ -70,6 +70,20 @@ Projeto inicializado com arquitetura de 3 camadas para separar:
   - `NEAR_THRESHOLD=120`
   - `MAX_RETRIES=3`
   - `RETRY_DELAY_SECONDS=300`
+  - `META_ACCOUNTS_JSON_PATH=config/meta_ad_accounts.json`
+  - `META_ALLOWED_ACCOUNT_IDS=133...,535...` (filtra somente contas desejadas)
+  - `META_ACCOUNT_LABELS=133...=Cliente A;535...=Cliente B` (nome amigavel)
+
+## Controle de contas por JSON
+
+- Arquivo padrao: `config/meta_ad_accounts.json`
+- Estrutura:
+  - `accounts`: lista com `name` e `id`
+- Exemplo:
+  - `{ "accounts": [ { "name": "Cliente A", "id": "123" } ] }`
+- Prioridade de leitura:
+  1. JSON em `META_ACCOUNTS_JSON_PATH`
+  2. Fallback para `META_ALLOWED_ACCOUNT_IDS` e `META_ACCOUNT_LABELS`
 
 ## Fluxo recomendado
 

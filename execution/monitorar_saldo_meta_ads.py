@@ -6,6 +6,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
 
@@ -98,6 +99,64 @@ def log_warn(message: str) -> None:
 
 def log_error(message: str) -> None:
     safe_print(f"❌ {message}")
+
+
+def normalize_account_id(value: str) -> str:
+    normalized = str(value or "").strip()
+    if normalized.startswith("act_"):
+        normalized = normalized[4:]
+    return normalized
+
+
+def parse_allowed_account_ids(raw_value: str) -> set[str]:
+    if not raw_value.strip():
+        return set()
+    values = [normalize_account_id(item) for item in raw_value.split(",")]
+    return {item for item in values if item}
+
+
+def parse_account_labels(raw_value: str) -> Dict[str, str]:
+    labels: Dict[str, str] = {}
+    if not raw_value.strip():
+        return labels
+
+    # Formato: "133=Cliente A;535=Cliente B"
+    for part in raw_value.split(";"):
+        entry = part.strip()
+        if not entry or "=" not in entry:
+            continue
+        raw_id, raw_name = entry.split("=", 1)
+        account_id = normalize_account_id(raw_id)
+        label = raw_name.strip()
+        if account_id and label:
+            labels[account_id] = label
+    return labels
+
+
+def load_accounts_from_json(config_path: str) -> tuple[set[str], Dict[str, str]]:
+    path = Path(config_path)
+    if not path.exists():
+        return set(), {}
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    accounts = raw.get("accounts", [])
+    if not isinstance(accounts, list):
+        raise ValueError("Campo 'accounts' do JSON deve ser uma lista.")
+
+    allowed_ids: set[str] = set()
+    labels: Dict[str, str] = {}
+    for item in accounts:
+        if not isinstance(item, dict):
+            continue
+        account_id = normalize_account_id(str(item.get("id", "")).strip())
+        account_name = str(item.get("name", "")).strip()
+        if not account_id:
+            continue
+        allowed_ids.add(account_id)
+        if account_name:
+            labels[account_id] = account_name
+
+    return allowed_ids, labels
 
 
 def request_with_retry(
@@ -352,15 +411,46 @@ def main() -> int:
         retry_delay_seconds = env_int("RETRY_DELAY_SECONDS", 300)
         treat_as_cents = os.getenv("META_BALANCE_IS_CENTS", "true").lower() == "true"
         tz_name = os.getenv("TZ", "America/Sao_Paulo").strip() or "America/Sao_Paulo"
+        json_accounts_path = (
+            os.getenv("META_ACCOUNTS_JSON_PATH", "config/meta_ad_accounts.json").strip()
+            or "config/meta_ad_accounts.json"
+        )
     except ValueError as exc:
         log_error(f"Erro de configuracao: {exc}")
         return 2
+
+    try:
+        allowed_ids_from_json, labels_from_json = load_accounts_from_json(json_accounts_path)
+    except Exception as exc:  # noqa: BLE001
+        log_error(f"Erro ao ler arquivo de contas ({json_accounts_path}): {exc}")
+        return 2
+
+    allowed_ids_from_env = parse_allowed_account_ids(os.getenv("META_ALLOWED_ACCOUNT_IDS", ""))
+    labels_from_env = parse_account_labels(os.getenv("META_ACCOUNT_LABELS", ""))
+
+    allowed_account_ids = allowed_ids_from_json or allowed_ids_from_env
+    account_labels = labels_from_json or labels_from_env
 
     log_info(
         f"Configuracao carregada | timezone={tz_name} | "
         f"limite_alerta={args.alert_threshold:.2f} | "
         f"limite_proximo_100={args.near_threshold:.2f}"
     )
+    if allowed_ids_from_json:
+        log_info(
+            "Contas carregadas por JSON | "
+            f"arquivo={json_accounts_path} | contas={len(allowed_ids_from_json)}"
+        )
+    elif allowed_ids_from_env:
+        log_info("Contas carregadas por variaveis .env (modo legado).")
+    else:
+        log_warn("Nenhum filtro de contas definido. Todas as contas serao avaliadas.")
+
+    if allowed_account_ids:
+        log_info(
+            "Filtro por whitelist ativo | "
+            f"contas_monitoradas={len(allowed_account_ids)}"
+        )
 
     session = requests.Session()
 
@@ -378,12 +468,27 @@ def main() -> int:
         log_error(f"Erro ao consultar contas do Meta Ads: {exc}")
         return 1
 
+    total_before_filter = len(accounts)
+    if allowed_account_ids:
+        accounts = [
+            item
+            for item in accounts
+            if normalize_account_id(item.account_id) in allowed_account_ids
+        ]
+
+    if account_labels:
+        for account in accounts:
+            label = account_labels.get(normalize_account_id(account.account_id))
+            if label:
+                account.name = label
+
     low_balances = [
         account for account in accounts if account.balance_brl <= args.alert_threshold
     ]
 
     result = {
-        "total_contas_encontradas": len(accounts),
+        "total_contas_encontradas": total_before_filter,
+        "total_contas_apos_filtro": len(accounts),
         "contas_abaixo_ou_igual_alerta": len(low_balances),
         "limite_alerta": args.alert_threshold,
         "limite_proximo_100": args.near_threshold,
