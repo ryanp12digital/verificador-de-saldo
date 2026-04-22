@@ -347,6 +347,7 @@ def build_alert_message(
 
     lines.append("")
     lines.append("✅ Acao recomendada: avaliar recarga das contas listadas.")
+    lines.append("🔗 Pagamento Meta: https://business.facebook.com/billing_hub/accounts/details/")
     return "\n".join(lines)
 
 
