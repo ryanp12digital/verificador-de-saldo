@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None  # type: ignore[misc, assignment]
 
 
 def normalize_customer_id(value: str) -> str:
@@ -59,6 +65,83 @@ def _micros_to_float(micros: Optional[int]) -> Optional[float]:
         return float(micros) / 1_000_000.0
     except (TypeError, ValueError):
         return None
+
+
+def _enum_name(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "name"):
+        return str(value.name)
+    return str(value)
+
+
+def _parse_ads_datetime(raw: str) -> Optional[datetime]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _now_utc() -> datetime:
+    tz_name = os.getenv("TZ", "America/Sao_Paulo").strip() or "America/Sao_Paulo"
+    if ZoneInfo is not None:
+        try:
+            return datetime.now(ZoneInfo(tz_name)).astimezone(timezone.utc)
+        except Exception:  # noqa: BLE001
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _budget_is_active(row: Any, now: datetime) -> bool:
+    status = _enum_name(row.account_budget.status)
+    if status in {"REMOVED", "CANCELLED"}:
+        return False
+    end_type = _enum_name(getattr(row.account_budget, "approved_end_time_type", None))
+    if end_type == "FOREVER":
+        return True
+    end_raw = getattr(row.account_budget, "approved_end_date_time", None) or ""
+    end_dt = _parse_ads_datetime(str(end_raw))
+    if end_dt is None:
+        return status in {"APPROVED", "ENABLED"}
+    return end_dt >= now
+
+
+def _remaining_from_budget_row(row: Any) -> Optional[Tuple[float, str, int]]:
+    """Retorna (restante em moeda, status, id) ou None se orcamento nao for finito."""
+    status = _enum_name(row.account_budget.status)
+    limit_type = _enum_name(row.account_budget.adjusted_spending_limit_type)
+    if limit_type == "INFINITE":
+        return None
+
+    adjusted = _micros_to_float(row.account_budget.adjusted_spending_limit_micros)
+    if adjusted is None:
+        approved = _micros_to_float(row.account_budget.approved_spending_limit_micros)
+        adjusted = approved
+    if adjusted is None:
+        return None
+
+    served = _micros_to_float(row.account_budget.amount_served_micros) or 0.0
+    remaining = adjusted - served
+    budget_id = int(getattr(row.account_budget, "id", 0) or 0)
+    return remaining, status, budget_id
+
+
+def _pick_best_budget(candidates: List[Tuple[float, str, int]]) -> Optional[Tuple[float, str, int]]:
+    """
+    Escolhe o orcamento com maior saldo restante positivo (mais proximo do 'Saldo' da UI).
+    Ignora orcamentos esgotados/negativos de periodos antigos.
+    """
+    if not candidates:
+        return None
+    positives = [c for c in candidates if c[0] >= 0]
+    if positives:
+        return max(positives, key=lambda item: item[0])
+    return None
 
 
 def _iter_gaql_rows(ga_service: Any, client: Any, customer_id: str, query: str) -> list[Any]:
@@ -140,32 +223,33 @@ def fetch_balance_for_customer(customer_id: str) -> GoogleAdsBalanceRow:
 
     q_budget = """
         SELECT
+          account_budget.id,
           account_budget.status,
+          account_budget.adjusted_spending_limit_micros,
+          account_budget.adjusted_spending_limit_type,
           account_budget.approved_spending_limit_micros,
-          account_budget.amount_served_micros
+          account_budget.amount_served_micros,
+          account_budget.approved_end_time_type,
+          account_budget.approved_end_date_time
         FROM account_budget
     """
 
-    best_remaining: Optional[float] = None
-    source = ""
+    now = _now_utc()
+    candidates: List[Tuple[float, str, int]] = []
+    had_negative_only = False
 
     try:
         for row in _iter_gaql_rows(ga_service, client, cid, q_budget):
-            status_enum = row.account_budget.status
-            status = status_enum.name if hasattr(status_enum, "name") else str(status_enum)
-            if status == "REMOVED":
+            if not _budget_is_active(row, now):
                 continue
-            approved = row.account_budget.approved_spending_limit_micros
-            served = row.account_budget.amount_served_micros
-            if approved is None or served is None:
+            parsed = _remaining_from_budget_row(row)
+            if parsed is None:
                 continue
-            ap = _micros_to_float(approved) if approved is not None else None
-            sv = _micros_to_float(served) if served is not None else None
-            if ap is not None and sv is not None:
-                remaining = ap - sv
-                if best_remaining is None or remaining < best_remaining:
-                    best_remaining = remaining
-                    source = f"account_budget({status})"
+            remaining, status, budget_id = parsed
+            if remaining < 0:
+                had_negative_only = True
+                continue
+            candidates.append((remaining, status, budget_id))
     except Exception as exc:  # noqa: BLE001
         return GoogleAdsBalanceRow(
             customer_id=cid,
@@ -177,7 +261,22 @@ def fetch_balance_for_customer(customer_id: str) -> GoogleAdsBalanceRow:
             source="account_budget",
         )
 
-    if best_remaining is None:
+    best = _pick_best_budget(candidates)
+    if best is None:
+        if had_negative_only:
+            return GoogleAdsBalanceRow(
+                customer_id=cid,
+                name=name,
+                currency=currency,
+                balance=None,
+                status="indisponivel",
+                message=(
+                    "Orcamentos API esgotados ou negativos; o saldo prepaid da interface "
+                    "(ex.: R$ 329) nao e exposto pela API Google Ads neste tipo de conta. "
+                    "Valide manualmente em Faturamento ou use faturamento mensal."
+                ),
+                source="account_budget",
+            )
         return GoogleAdsBalanceRow(
             customer_id=cid,
             name=name,
@@ -188,14 +287,15 @@ def fetch_balance_for_customer(customer_id: str) -> GoogleAdsBalanceRow:
             source="",
         )
 
+    remaining, status, budget_id = best
     return GoogleAdsBalanceRow(
         customer_id=cid,
         name=name,
         currency=currency,
-        balance=float(best_remaining),
+        balance=float(remaining),
         status="ok",
         message="",
-        source=source,
+        source=f"account_budget({status},id={budget_id},adjusted-served)",
     )
 
 

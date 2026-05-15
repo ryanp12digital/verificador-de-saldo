@@ -74,7 +74,8 @@ Seguranca: por padrao o servidor escuta em `127.0.0.1`. Em VPS publica use TLS/r
 ## Google Ads (monitoramento)
 
 - Script: `execution/monitorar_saldo_google_ads.py`
-- Usa orcamento `account_budget` quando disponivel; contas so faturamento automatico podem retornar `indisponivel`.
+- Usa orcamento `account_budget` (`adjusted_spending_limit - amount_served`) quando disponivel.
+- Contas com pagamento automatico/prepaid: a API pode nao expor o mesmo "Saldo" da interface; nesse caso retorna `indisponivel` em vez de valores negativos incorretos.
 - OAuth (uma vez, para obter `GOOGLE_ADS_REFRESH_TOKEN`):
 
   - `python execution/google_ads_setup_oauth.py`
