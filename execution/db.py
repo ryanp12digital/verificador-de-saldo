@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 from contextlib import contextmanager
 from typing import Any, Generator, Iterable, Literal, Optional, Tuple
 from urllib.parse import quote_plus
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 
 Provider = Literal["meta", "google_ads"]
 
@@ -79,6 +80,12 @@ CREATE INDEX IF NOT EXISTS idx_monitored_accounts_provider
 
 CREATE INDEX IF NOT EXISTS idx_monitored_accounts_enabled
     ON monitored_accounts (provider, enabled);
+
+CREATE TABLE IF NOT EXISTS alert_message_style (
+    provider VARCHAR(16) PRIMARY KEY CHECK (provider IN ('meta', 'google')),
+    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
@@ -163,3 +170,58 @@ def google_accounts_from_db() -> list[dict[str, str]]:
             }
         )
     return out
+
+
+STYLE_KEYS = frozenset({"title", "reference_line", "criterion_line", "account_line", "footer"})
+
+
+def sanitize_style_payload(payload: Any) -> dict[str, str]:
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, val in payload.items():
+        if key in STYLE_KEYS and isinstance(val, str):
+            out[str(key)] = val
+    return out
+
+
+def get_alert_message_style(provider: str) -> Optional[dict[str, str]]:
+    if provider not in ("meta", "google"):
+        raise ValueError("provider deve ser meta ou google")
+    if not is_database_configured():
+        return None
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                "SELECT config FROM alert_message_style WHERE provider = %s",
+                (provider,),
+            )
+            row = cur.fetchone()
+    if not row or row.get("config") is None:
+        return None
+    cfg = row["config"]
+    if isinstance(cfg, str):
+        cfg = json.loads(cfg)
+    if not isinstance(cfg, dict):
+        return None
+    return {str(k): str(v) for k, v in cfg.items() if isinstance(v, str)}
+
+
+def upsert_alert_message_style(provider: str, config: dict[str, str]) -> None:
+    if provider not in ("meta", "google"):
+        raise ValueError("provider deve ser meta ou google")
+    if not is_database_configured():
+        raise RuntimeError("PostgreSQL nao configurado.")
+    clean = sanitize_style_payload(config)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO alert_message_style (provider, config)
+                VALUES (%s, %s)
+                ON CONFLICT (provider) DO UPDATE SET
+                    config = EXCLUDED.config,
+                    updated_at = NOW()
+                """,
+                (provider, Json(clean)),
+            )

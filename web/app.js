@@ -71,14 +71,14 @@ function addRow(tableId, row = {}) {
   const tdId = document.createElement("td");
   const inId = document.createElement("input");
   inId.type = "text";
-  inId.className = "cell-id";
+  inId.className = "cell-id input";
   inId.value = row.external_id || "";
   tdId.appendChild(inId);
 
   const tdName = document.createElement("td");
   const inName = document.createElement("input");
   inName.type = "text";
-  inName.className = "cell-name";
+  inName.className = "cell-name input";
   inName.value = row.display_name || "";
   tdName.appendChild(inName);
 
@@ -186,6 +186,88 @@ async function refreshGoogleBalances() {
   }
 }
 
+const STYLE_KEYS = ["title", "reference_line", "criterion_line", "account_line", "footer"];
+
+let styleDefaults = null;
+
+function applyStyleToForm(provider, obj) {
+  const block = obj && typeof obj === "object" ? obj : {};
+  for (const k of STYLE_KEYS) {
+    const el = document.getElementById(`style-${provider}-${k}`);
+    if (el) el.value = block[k] != null ? String(block[k]) : "";
+  }
+}
+
+function collectStyle(provider) {
+  const o = {};
+  for (const k of STYLE_KEYS) {
+    const el = document.getElementById(`style-${provider}-${k}`);
+    if (el) o[k] = el.value;
+  }
+  return o;
+}
+
+function renderStyleHelp(help) {
+  const ul = document.getElementById("placeholderList");
+  const note = document.getElementById("placeholderNote");
+  if (!ul || !note) return;
+  ul.innerHTML = "";
+  const items = (help && help.placeholders) || [];
+  items.forEach((line) => {
+    const li = document.createElement("li");
+    li.textContent = line;
+    ul.appendChild(li);
+  });
+  note.textContent = (help && help.note) || "";
+}
+
+async function loadAlertStyle() {
+  const data = await api("/api/alert-style");
+  styleDefaults = data.defaults || null;
+  applyStyleToForm("meta", data.meta);
+  applyStyleToForm("google", data.google);
+  renderStyleHelp(data.help);
+  const pm = document.getElementById("stylePreviewMeta");
+  const pg = document.getElementById("stylePreviewGoogle");
+  if (pm) pm.textContent = data.preview_meta || "";
+  if (pg) pg.textContent = data.preview_google || "";
+}
+
+async function saveAlertStyle() {
+  const body = { meta: collectStyle("meta"), google: collectStyle("google") };
+  const data = await api("/api/alert-style", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  setAuthStatus(`Mensagens salvas (${data.saved || "ok"}).`, true);
+  await loadAlertStyle();
+}
+
+async function previewAlertStyle() {
+  const body = { meta: collectStyle("meta"), google: collectStyle("google") };
+  const data = await api("/api/alert-style/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const pm = document.getElementById("stylePreviewMeta");
+  const pg = document.getElementById("stylePreviewGoogle");
+  if (pm) pm.textContent = data.preview_meta || "";
+  if (pg) pg.textContent = data.preview_google || "";
+  setAuthStatus("Prévia atualizada (rascunho atual).", true);
+}
+
+function resetStylesToDefaults() {
+  if (!styleDefaults) {
+    setAuthStatus("Carregue os dados primeiro (token + recarregar).", false);
+    return;
+  }
+  applyStyleToForm("meta", styleDefaults.meta || {});
+  applyStyleToForm("google", styleDefaults.google || {});
+  setAuthStatus("Campos restaurados para os padrões do sistema. Clique em Salvar para persistir.", true);
+}
+
 function init() {
   const input = document.getElementById("apiToken");
   const saved = localStorage.getItem(TOKEN_KEY);
@@ -194,6 +276,15 @@ function init() {
   document.getElementById("saveToken").addEventListener("click", () => {
     localStorage.setItem(TOKEN_KEY, input.value.trim());
     setAuthStatus("Token salvo neste navegador.", true);
+    loadMeta().catch((e) => setAuthStatus(e.message, false));
+    loadGoogle().catch(() => {});
+    loadAlertStyle().catch((e) => {
+      const hint =
+        e.status === 401 || e.status === 403
+          ? "Token rejeitado pela API — confira DASHBOARD_API_TOKEN."
+          : e.message || "Erro ao carregar templates.";
+      setAuthStatus(hint, false);
+    });
   });
 
   initTabs();
@@ -220,8 +311,35 @@ function init() {
     refreshGoogleBalances().catch((e) => setAuthStatus(e.message, false));
   });
 
+  const saveStyles = document.getElementById("saveStyles");
+  const previewStyles = document.getElementById("previewStyles");
+  const resetStyles = document.getElementById("resetStyles");
+  if (saveStyles) {
+    saveStyles.addEventListener("click", () => {
+      saveAlertStyle().catch((e) => setAuthStatus(e.message, false));
+    });
+  }
+  if (previewStyles) {
+    previewStyles.addEventListener("click", () => {
+      previewAlertStyle().catch((e) => setAuthStatus(e.message, false));
+    });
+  }
+  if (resetStyles) {
+    resetStyles.addEventListener("click", () => resetStylesToDefaults());
+  }
+
   loadMeta().catch((e) => setAuthStatus(e.message, false));
   loadGoogle().catch(() => {});
+  loadAlertStyle().catch((e) => {
+    const hint =
+      e.status === 401 || e.status === 403
+        ? "Token inválido ou ausente — defina o Bearer acima para editar mensagens."
+        : e.message || "Não foi possível carregar os templates.";
+    ["stylePreviewMeta", "stylePreviewGoogle"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = hint;
+    });
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

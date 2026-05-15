@@ -10,6 +10,7 @@ import requests
 from dotenv import load_dotenv
 
 from accounts_config import load_meta_allowlist_for_monitor
+from alert_message_style import build_meta_whatsapp_message, load_merged_style
 from evolution_notify import send_group_message
 from meta_ads_balance import (
     AdAccountBalance,
@@ -91,40 +92,6 @@ def log_warn(message: str) -> None:
 
 def log_error(message: str) -> None:
     safe_print(f"❌ {message}")
-
-
-def build_alert_message(
-    low_balances: List[AdAccountBalance],
-    *,
-    alert_threshold: float,
-    near_threshold: float,
-    tz_name: str,
-) -> str:
-    now = get_now_in_timezone(tz_name).strftime("%d/%m/%Y %H:%M")
-    lines = [
-        "🚨 *Alerta de Saldo - Meta Ads*",
-        f"🕒 Referencia: {now} ({tz_name})",
-        f"🎯 Criterio: saldo <= R${alert_threshold:.2f}",
-        "",
-    ]
-
-    for account in sorted(low_balances, key=lambda item: item.balance_brl):
-        if account.balance_brl <= 100:
-            level = "🔴 CRITICO"
-        elif account.balance_brl <= near_threshold:
-            level = "🟠 ATENCAO (proximo de R$100)"
-        else:
-            level = "🟡 ALERTA"
-
-        lines.append(
-            f"- {level} | {account.name} "
-            f"- Saldo: R${account.balance_brl:.2f} {account.currency}"
-        )
-
-    lines.append("")
-    lines.append("✅ Acao recomendada: avaliar recarga das contas listadas.")
-    lines.append("🔗 Pagamento Meta: https://business.facebook.com/billing_hub/accounts/details/")
-    return "\n".join(lines)
 
 
 def main() -> int:
@@ -248,11 +215,15 @@ def main() -> int:
     log_warn(f"Contas abaixo do limite detectadas: {len(low_balances)}")
     log_info(f"Top saldos baixos: {preview}")
 
-    message = build_alert_message(
-        low_balances,
+    now_str = get_now_in_timezone(tz_name).strftime("%d/%m/%Y %H:%M")
+    style = load_merged_style("meta")
+    message = build_meta_whatsapp_message(
+        low_balances=low_balances,
         alert_threshold=args.alert_threshold,
         near_threshold=args.near_threshold,
         tz_name=tz_name,
+        now_str=now_str,
+        style=style,
     )
 
     if args.dry_run:

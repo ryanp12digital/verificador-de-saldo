@@ -14,17 +14,31 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, List, Tuple
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request, send_from_directory
+from zoneinfo import ZoneInfo
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
 # pylint: disable=wrong-import-position
+from alert_message_style import (
+    DEFAULT_GOOGLE,
+    DEFAULT_META,
+    build_google_whatsapp_message,
+    build_meta_whatsapp_message,
+    get_full_style_payload,
+    keys_help,
+    load_merged_style,
+    merge_style_with_override,
+    persist_styles,
+)
 from db import is_database_configured, list_accounts, migrate, replace_accounts
 from meta_ads_balance import (
     fetch_meta_balances_for_ids,
@@ -306,6 +320,116 @@ def balances_google() -> Any:
         return jsonify({"error": str(exc)}), 502
 
     return jsonify({"accounts": data})
+
+
+def _preview_now_strings() -> Tuple[str, str]:
+    tz_name = os.getenv("TZ", "America/Sao_Paulo").strip() or "America/Sao_Paulo"
+    try:
+        now = datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        if tz_name == "America/Sao_Paulo":
+            now = datetime.now(timezone.utc) - timedelta(hours=3)
+        else:
+            now = datetime.now(timezone.utc)
+    return now.strftime("%d/%m/%Y %H:%M"), tz_name
+
+
+def _fake_meta_account() -> SimpleNamespace:
+    return SimpleNamespace(
+        account_id="1234567890123456",
+        name="Conta Exemplo LTDA",
+        currency="BRL",
+        balance_brl=99.5,
+        balance_source="balance",
+        raw_balance=None,
+    )
+
+
+def _fake_google_account() -> SimpleNamespace:
+    return SimpleNamespace(
+        customer_id="1234567890",
+        name="Cliente Demo",
+        currency="BRL",
+        balance=88.0,
+        source="account_budget(ENABLED)",
+    )
+
+
+@app.get("/api/alert-style")
+@require_dashboard_token
+def get_alert_style() -> Any:
+    payload = get_full_style_payload(REPO_ROOT)
+    now_str, tz_name = _preview_now_strings()
+    style_m = load_merged_style("meta", REPO_ROOT)
+    style_g = load_merged_style("google", REPO_ROOT)
+    preview_meta = build_meta_whatsapp_message(
+        low_balances=[_fake_meta_account()],
+        alert_threshold=200.0,
+        near_threshold=120.0,
+        tz_name=tz_name,
+        now_str=now_str,
+        style=style_m,
+    )
+    preview_google = build_google_whatsapp_message(
+        low=[_fake_google_account()],
+        alert_threshold=200.0,
+        near_threshold=120.0,
+        tz_name=tz_name,
+        now_str=now_str,
+        style=style_g,
+    )
+    return jsonify(
+        {
+            **payload,
+            "defaults": {"meta": DEFAULT_META, "google": DEFAULT_GOOGLE},
+            "help": keys_help(),
+            "preview_meta": preview_meta,
+            "preview_google": preview_google,
+        }
+    )
+
+
+@app.put("/api/alert-style")
+@require_dashboard_token
+def put_alert_style() -> Any:
+    body = request.get_json(force=True, silent=False) or {}
+    meta = body.get("meta") or {}
+    google = body.get("google") or {}
+    if not isinstance(meta, dict) or not isinstance(google, dict):
+        return jsonify({"error": "meta e google devem ser objetos"}), 400
+    try:
+        where = persist_styles(meta, google, REPO_ROOT)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True, "saved": where})
+
+
+@app.post("/api/alert-style/preview")
+@require_dashboard_token
+def post_alert_style_preview() -> Any:
+    body = request.get_json(force=True, silent=False) or {}
+    meta_ov = body.get("meta") if isinstance(body.get("meta"), dict) else None
+    google_ov = body.get("google") if isinstance(body.get("google"), dict) else None
+    now_str, tz_name = _preview_now_strings()
+    style_m = merge_style_with_override("meta", meta_ov, REPO_ROOT)
+    style_g = merge_style_with_override("google", google_ov, REPO_ROOT)
+    preview_meta = build_meta_whatsapp_message(
+        low_balances=[_fake_meta_account()],
+        alert_threshold=200.0,
+        near_threshold=120.0,
+        tz_name=tz_name,
+        now_str=now_str,
+        style=style_m,
+    )
+    preview_google = build_google_whatsapp_message(
+        low=[_fake_google_account()],
+        alert_threshold=200.0,
+        near_threshold=120.0,
+        tz_name=tz_name,
+        now_str=now_str,
+        style=style_g,
+    )
+    return jsonify({"preview_meta": preview_meta, "preview_google": preview_google})
 
 
 @app.get("/")

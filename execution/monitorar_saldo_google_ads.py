@@ -11,6 +11,7 @@ import requests
 from dotenv import load_dotenv
 
 from accounts_config import load_google_accounts_for_monitor
+from alert_message_style import build_google_whatsapp_message, load_merged_style
 from evolution_notify import send_group_message
 from google_ads_balance import fetch_balance_for_customer
 
@@ -96,40 +97,6 @@ class LowGoogleAccount:
     currency: str
     balance: float
     source: str
-
-
-def build_alert_message(
-    low: List[LowGoogleAccount],
-    *,
-    alert_threshold: float,
-    near_threshold: float,
-    tz_name: str,
-) -> str:
-    now = get_now_in_timezone(tz_name).strftime("%d/%m/%Y %H:%M")
-    lines = [
-        "🚨 *Alerta de Saldo - Google Ads*",
-        f"🕒 Referencia: {now} ({tz_name})",
-        f"🎯 Criterio: saldo/orcamento restante <= {alert_threshold:.2f} (moeda da conta)",
-        "",
-    ]
-
-    for item in sorted(low, key=lambda x: x.balance):
-        if item.balance <= 100:
-            level = "🔴 CRITICO"
-        elif item.balance <= near_threshold:
-            level = "🟠 ATENCAO (proximo de 100)"
-        else:
-            level = "🟡 ALERTA"
-
-        lines.append(
-            f"- {level} | {item.name or item.customer_id} "
-            f"- Saldo: {item.balance:.2f} {item.currency} ({item.source})"
-        )
-
-    lines.append("")
-    lines.append("✅ Acao recomendada: revisar pagamentos / orcamentos das contas listadas.")
-    lines.append("🔗 Google Ads: https://ads.google.com/")
-    return "\n".join(lines)
 
 
 def main() -> int:
@@ -222,11 +189,15 @@ def main() -> int:
         log_success("Nenhuma conta abaixo do limite. Nenhuma mensagem enviada ao grupo.")
         return 0
 
-    message = build_alert_message(
-        low,
+    now_str = get_now_in_timezone(tz_name).strftime("%d/%m/%Y %H:%M")
+    style = load_merged_style("google")
+    message = build_google_whatsapp_message(
+        low=low,
         alert_threshold=args.alert_threshold,
         near_threshold=args.near_threshold,
         tz_name=tz_name,
+        now_str=now_str,
+        style=style,
     )
 
     if args.dry_run:

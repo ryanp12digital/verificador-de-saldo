@@ -123,6 +123,65 @@
         <pre class="output" id="googleBalancesOut"></pre>
       </div>
     </section>
+
+    <section class="card card-messages" aria-labelledby="msg-heading">
+      <div class="card-head">
+        <span class="card-icon card-icon-msg" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        </span>
+        <div>
+          <h2 id="msg-heading" class="card-title">Mensagens ao grupo (WhatsApp)</h2>
+          <p class="card-sub">Título, linhas e rodapé. Placeholders com chaves duplas, ex. <code>{{name}}</code>, <code>{{balance}}</code>.</p>
+        </div>
+      </div>
+
+      <details class="placeholders-help">
+        <summary>Placeholders disponíveis</summary>
+        <ul id="placeholderList" class="placeholder-ul"></ul>
+        <p id="placeholderNote" class="placeholder-note"></p>
+      </details>
+
+      <div class="msg-grid">
+        <div class="msg-column">
+          <h3 class="msg-platform">Meta Ads</h3>
+          <label class="field-label" for="style-meta-title">Título</label>
+          <input type="text" id="style-meta-title" class="input input-block" />
+          <label class="field-label" for="style-meta-reference_line">Linha de referência (data)</label>
+          <input type="text" id="style-meta-reference_line" class="input input-block" />
+          <label class="field-label" for="style-meta-criterion_line">Linha de critério (limite)</label>
+          <input type="text" id="style-meta-criterion_line" class="input input-block" />
+          <label class="field-label" for="style-meta-account_line">Linha por conta</label>
+          <input type="text" id="style-meta-account_line" class="input input-block" />
+          <label class="field-label" for="style-meta-footer">Rodapé</label>
+          <textarea id="style-meta-footer" class="input textarea" rows="4"></textarea>
+          <p class="msg-preview-label">Prévia (conta fictícia)</p>
+          <pre class="output output-preview" id="stylePreviewMeta"></pre>
+        </div>
+        <div class="msg-column">
+          <h3 class="msg-platform">Google Ads</h3>
+          <label class="field-label" for="style-google-title">Título</label>
+          <input type="text" id="style-google-title" class="input input-block" />
+          <label class="field-label" for="style-google-reference_line">Linha de referência (data)</label>
+          <input type="text" id="style-google-reference_line" class="input input-block" />
+          <label class="field-label" for="style-google-criterion_line">Linha de critério (limite)</label>
+          <input type="text" id="style-google-criterion_line" class="input input-block" />
+          <label class="field-label" for="style-google-account_line">Linha por conta</label>
+          <input type="text" id="style-google-account_line" class="input input-block" />
+          <label class="field-label" for="style-google-footer">Rodapé</label>
+          <textarea id="style-google-footer" class="input textarea" rows="4"></textarea>
+          <p class="msg-preview-label">Prévia (conta fictícia)</p>
+          <pre class="output output-preview" id="stylePreviewGoogle"></pre>
+        </div>
+      </div>
+
+      <div class="msg-actions">
+        <button type="button" class="btn btn-accent" id="saveStyles">Salvar mensagens</button>
+        <button type="button" class="btn btn-muted" id="previewStyles">Atualizar prévia</button>
+        <button type="button" class="btn btn-outline" id="resetStyles">Restaurar padrões</button>
+      </div>
+    </section>
   </div>
 
   <script src="/app.js"></script>
