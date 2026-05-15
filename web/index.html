@@ -45,6 +45,54 @@
       <div class="auth-feedback" id="authStatus" role="status" aria-live="polite"></div>
     </section>
 
+    <section class="card card-schedule" aria-labelledby="schedule-heading">
+      <div class="card-head">
+        <span class="card-icon card-icon-clock" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+        </span>
+        <div>
+          <h2 id="schedule-heading" class="card-title">Agendamento e envio</h2>
+          <p class="card-sub">Horários automáticos (fuso <code>TZ</code> do servidor) e disparo manual ao grupo WhatsApp.</p>
+        </div>
+      </div>
+
+      <label class="field-label" for="scheduleTimes">Horários (um por linha, 24h)</label>
+      <textarea id="scheduleTimes" class="input textarea" rows="3" placeholder="08:00&#10;18:00"></textarea>
+      <p class="hint" id="scheduleCronHint"></p>
+
+      <div class="schedule-checks">
+        <label class="check-row">
+          <input type="checkbox" id="scheduleMetaEnabled" checked />
+          <span>Meta Ads no agendamento</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="scheduleGoogleEnabled" checked />
+          <span>Google Ads no agendamento</span>
+        </label>
+      </div>
+
+      <div class="schedule-actions">
+        <button type="button" class="btn btn-accent" id="saveSchedule">Salvar horários</button>
+      </div>
+
+      <div class="force-block">
+        <p class="force-title">Enviar agora ao grupo</p>
+        <p class="force-hint">Normal: só contas abaixo do limite. Forçado: todas as contas com saldo.</p>
+        <div class="force-actions">
+          <button type="button" class="btn btn-outline" data-run="meta" data-force="false">Meta · automático</button>
+          <button type="button" class="btn btn-outline" data-run="google" data-force="false">Google · automático</button>
+          <button type="button" class="btn btn-muted" data-run="both" data-force="false">Ambos · automático</button>
+          <button type="button" class="btn btn-accent" data-run="meta" data-force="true">Meta · forçar</button>
+          <button type="button" class="btn btn-accent" data-run="google" data-force="true">Google · forçar</button>
+          <button type="button" class="btn btn-accent" data-run="both" data-force="true">Ambos · forçar</button>
+        </div>
+        <pre class="output output-run" id="monitorRunOut"></pre>
+      </div>
+    </section>
+
     <div class="tabs-wrap">
       <nav class="tabs" role="tablist" aria-label="Plataforma">
         <button type="button" class="tab active" data-tab="meta" role="tab" aria-selected="true" id="tab-meta">Meta Ads</button>

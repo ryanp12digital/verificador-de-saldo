@@ -191,8 +191,10 @@ def build_meta_whatsapp_message(
             level = "🔴 CRITICO"
         elif account.balance_brl <= near_threshold:
             level = "🟠 ATENCAO (proximo de R$100)"
-        else:
+        elif account.balance_brl <= alert_threshold:
             level = "🟡 ALERTA"
+        else:
+            level = "🟢 OK"
 
         ctx = {
             "level": level,
@@ -258,8 +260,10 @@ def build_google_whatsapp_message(
             level = "🔴 CRITICO"
         elif item.balance <= near_threshold:
             level = "🟠 ATENCAO (proximo de 100)"
-        else:
+        elif item.balance <= alert_threshold:
             level = "🟡 ALERTA"
+        else:
+            level = "🟢 OK"
 
         ctx = {
             "level": level,

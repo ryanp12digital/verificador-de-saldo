@@ -6,18 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List
 from zoneinfo import ZoneInfo
 
-import requests
 from dotenv import load_dotenv
-
-from accounts_config import load_meta_allowlist_for_monitor
-from alert_message_style import build_meta_whatsapp_message, load_merged_style
-from evolution_notify import send_group_message
-from meta_ads_balance import (
-    AdAccountBalance,
-    fetch_accounts,
-    normalize_account_id,
-    normalize_accounts,
-)
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,6 +32,11 @@ def parse_args() -> argparse.Namespace:
         "--dry-run",
         action="store_true",
         help="Nao envia mensagem no grupo. Apenas imprime a mensagem gerada.",
+    )
+    parser.add_argument(
+        "--force-send",
+        action="store_true",
+        help="Envia relatorio com todas as contas monitoradas, mesmo acima do limite.",
     )
     return parser.parse_args()
 
@@ -98,157 +92,39 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     log_info("Iniciando rotina de monitoramento de saldo Meta Ads")
+    if args.force_send:
+        log_warn("Modo force-send: todas as contas monitoradas entram na mensagem.")
 
-    try:
-        access_token = env_required("META_ACCESS_TOKEN")
-        business_id = env_required("META_BUSINESS_ID")
-        evolution_base_url = env_required("EVOLUTION_SERVER_URL")
-        evolution_api_key = env_required("EVOLUTION_API_KEY")
-        evolution_instance = env_required("EVOLUTION_INSTANCE")
-        evolution_group_id = env_required("EVOLUTION_GROUP_ID")
-        max_retries = env_int("MAX_RETRIES", 3)
-        retry_delay_seconds = env_int("RETRY_DELAY_SECONDS", 300)
-        treat_as_cents = os.getenv("META_BALANCE_IS_CENTS", "true").lower() == "true"
-        tz_name = os.getenv("TZ", "America/Sao_Paulo").strip() or "America/Sao_Paulo"
-        json_accounts_path = (
-            os.getenv("META_ACCOUNTS_JSON_PATH", "config/meta_ad_accounts.json").strip()
-            or "config/meta_ad_accounts.json"
-        )
-    except ValueError as exc:
-        log_error(f"Erro de configuracao: {exc}")
-        return 2
+    from monitor_runner import run_meta_monitor
 
-    try:
-        allowed_account_ids, account_labels, source_accounts, strict_whitelist = (
-            load_meta_allowlist_for_monitor(json_accounts_path)
-        )
-    except Exception as exc:  # noqa: BLE001
-        log_error(f"Erro ao carregar lista de contas: {exc}")
-        return 2
-
-    log_info(
-        f"Configuracao carregada | timezone={tz_name} | "
-        f"limite_alerta={args.alert_threshold:.2f} | "
-        f"limite_proximo_100={args.near_threshold:.2f}"
-    )
-
-    if source_accounts == "postgres":
-        log_info(f"Contas carregadas do PostgreSQL | contas={len(allowed_account_ids)}")
-    elif source_accounts == "json":
-        log_info(
-            "Contas carregadas por JSON | "
-            f"arquivo={json_accounts_path} | contas={len(allowed_account_ids)}"
-        )
-    elif source_accounts == "env":
-        log_info("Contas carregadas por variaveis .env (modo legado).")
-    else:
-        log_warn("Nenhum filtro de contas definido. Todas as contas serao avaliadas.")
-
-    if strict_whitelist and not allowed_account_ids:
-        log_warn("Nenhuma conta Meta habilitada no Postgres. Encerrando sem varredura.")
-        return 0
-
-    if allowed_account_ids:
-        log_info(
-            "Filtro por whitelist ativo | "
-            f"contas_monitoradas={len(allowed_account_ids)}"
-        )
-
-    session = requests.Session()
-
-    try:
-        log_info("Consultando contas no Meta Ads...")
-        accounts_raw = fetch_accounts(
-            session,
-            business_id=business_id,
-            access_token=access_token,
-            max_retries=max_retries,
-            retry_delay_seconds=retry_delay_seconds,
-        )
-        accounts = normalize_accounts(accounts_raw, treat_as_cents=treat_as_cents)
-    except Exception as exc:  # noqa: BLE001
-        log_error(f"Erro ao consultar contas do Meta Ads: {exc}")
-        return 1
-
-    total_before_filter = len(accounts)
-    if strict_whitelist:
-        accounts = [
-            item
-            for item in accounts
-            if normalize_account_id(item.account_id) in allowed_account_ids
-        ]
-    elif allowed_account_ids:
-        accounts = [
-            item
-            for item in accounts
-            if normalize_account_id(item.account_id) in allowed_account_ids
-        ]
-
-    if account_labels:
-        for account in accounts:
-            label = account_labels.get(normalize_account_id(account.account_id))
-            if label:
-                account.name = label
-
-    low_balances = [
-        account for account in accounts if account.balance_brl <= args.alert_threshold
-    ]
-
-    result = {
-        "total_contas_encontradas": total_before_filter,
-        "total_contas_apos_filtro": len(accounts),
-        "contas_abaixo_ou_igual_alerta": len(low_balances),
-        "limite_alerta": args.alert_threshold,
-        "limite_proximo_100": args.near_threshold,
-    }
-    log_info("Resumo da varredura:")
-    safe_print(json.dumps(result, ensure_ascii=True, indent=2))
-
-    if not low_balances:
-        log_success("Nenhuma conta abaixo do limite. Nenhuma mensagem enviada ao grupo.")
-        return 0
-
-    top_low = sorted(low_balances, key=lambda item: item.balance_brl)[:3]
-    preview = ", ".join(
-        f"{item.name}: R${item.balance_brl:.2f} ({item.balance_source})" for item in top_low
-    )
-    log_warn(f"Contas abaixo do limite detectadas: {len(low_balances)}")
-    log_info(f"Top saldos baixos: {preview}")
-
-    now_str = get_now_in_timezone(tz_name).strftime("%d/%m/%Y %H:%M")
-    style = load_merged_style("meta")
-    message = build_meta_whatsapp_message(
-        low_balances=low_balances,
+    result = run_meta_monitor(
+        force_send=args.force_send,
+        dry_run=args.dry_run,
         alert_threshold=args.alert_threshold,
         near_threshold=args.near_threshold,
-        tz_name=tz_name,
-        now_str=now_str,
-        style=style,
     )
 
-    if args.dry_run:
-        log_info("MODO DRY-RUN ativo. Mensagem sera exibida, sem envio ao grupo.")
-        safe_print(message)
+    log_info("Resumo da varredura:")
+    safe_print(json.dumps(result.summary, ensure_ascii=True, indent=2))
+
+    if result.error:
+        log_error(result.error)
+        return result.exit_code
+
+    if not result.message and not result.sent:
+        log_success("Nenhuma conta para alertar. Nenhuma mensagem enviada ao grupo.")
         return 0
 
-    try:
-        log_info("Enviando alerta para o grupo no WhatsApp...")
-        send_group_message(
-            session,
-            base_url=evolution_base_url,
-            api_key=evolution_api_key,
-            instance=evolution_instance,
-            group_id=evolution_group_id,
-            message=message,
-            max_retries=max_retries,
-            retry_delay_seconds=retry_delay_seconds,
-        )
-    except Exception as exc:  # noqa: BLE001
-        log_error(f"Erro ao enviar mensagem para o grupo: {exc}")
-        return 1
+    if args.dry_run and result.message:
+        log_info("MODO DRY-RUN ativo. Mensagem sera exibida, sem envio ao grupo.")
+        safe_print(result.message)
+        return 0
 
-    log_success("Mensagem enviada com sucesso para o grupo.")
-    return 0
+    if result.sent:
+        log_success("Mensagem enviada com sucesso para o grupo.")
+        return 0
+
+    return result.exit_code
 
 
 if __name__ == "__main__":

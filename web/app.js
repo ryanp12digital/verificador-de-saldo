@@ -189,6 +189,7 @@ async function refreshGoogleBalances() {
 const STYLE_KEYS = ["title", "reference_line", "criterion_line", "account_line", "footer"];
 
 let styleDefaults = null;
+let scheduleTimezone = "America/Sao_Paulo";
 
 function applyStyleToForm(provider, obj) {
   const block = obj && typeof obj === "object" ? obj : {};
@@ -258,6 +259,84 @@ async function previewAlertStyle() {
   setAuthStatus("Prévia atualizada (rascunho atual).", true);
 }
 
+function parseScheduleTimes(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function applyScheduleToForm(data) {
+  const timesEl = document.getElementById("scheduleTimes");
+  const metaEl = document.getElementById("scheduleMetaEnabled");
+  const googleEl = document.getElementById("scheduleGoogleEnabled");
+  const hint = document.getElementById("scheduleCronHint");
+  if (timesEl) timesEl.value = (data.times || []).join("\n");
+  if (metaEl) metaEl.checked = data.meta_enabled !== false;
+  if (googleEl) googleEl.checked = data.google_enabled !== false;
+  if (hint) {
+    hint.textContent = data.cron
+      ? `CRON no container: ${data.cron} · fuso ${data.timezone || "TZ do servidor"}`
+      : "";
+  }
+}
+
+function collectSchedulePayload() {
+  const timesEl = document.getElementById("scheduleTimes");
+  const metaEl = document.getElementById("scheduleMetaEnabled");
+  const googleEl = document.getElementById("scheduleGoogleEnabled");
+  return {
+    times: parseScheduleTimes(timesEl ? timesEl.value : ""),
+    timezone: scheduleTimezone,
+    meta_enabled: metaEl ? metaEl.checked : true,
+    google_enabled: googleEl ? googleEl.checked : true,
+  };
+}
+
+async function loadMonitorSchedule() {
+  const data = await api("/api/monitor/schedule");
+  if (data.timezone) scheduleTimezone = data.timezone;
+  applyScheduleToForm(data);
+}
+
+async function saveMonitorSchedule() {
+  const body = collectSchedulePayload();
+  const data = await api("/api/monitor/schedule", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  applyScheduleToForm({ ...data.schedule, cron: data.cron });
+  setAuthStatus(data.note || "Horários salvos.", true);
+}
+
+async function runMonitor(platform, force) {
+  const out = document.getElementById("monitorRunOut");
+  if (out) out.textContent = "Executando…";
+  const data = await api("/api/monitor/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ platform, force }),
+  });
+  if (out) out.textContent = JSON.stringify(data, null, 2);
+  const parts = [];
+  if (data.meta) {
+    parts.push(
+      data.meta.sent
+        ? "Meta: mensagem enviada."
+        : `Meta: ${data.meta.summary?.motivo || data.meta.error || "sem envio"}`
+    );
+  }
+  if (data.google) {
+    parts.push(
+      data.google.sent
+        ? "Google: mensagem enviada."
+        : `Google: ${data.google.summary?.motivo || data.google.error || "sem envio"}`
+    );
+  }
+  setAuthStatus(parts.join(" ") || "Execução concluída.", data.meta?.sent || data.google?.sent);
+}
+
 function resetStylesToDefaults() {
   if (!styleDefaults) {
     setAuthStatus("Carregue os dados primeiro (token + recarregar).", false);
@@ -278,13 +357,8 @@ function init() {
     setAuthStatus("Token salvo neste navegador.", true);
     loadMeta().catch((e) => setAuthStatus(e.message, false));
     loadGoogle().catch(() => {});
-    loadAlertStyle().catch((e) => {
-      const hint =
-        e.status === 401 || e.status === 403
-          ? "Token rejeitado pela API — confira DASHBOARD_API_TOKEN."
-          : e.message || "Erro ao carregar templates.";
-      setAuthStatus(hint, false);
-    });
+    loadAlertStyle().catch((e) => setAuthStatus(e.message, false));
+    loadMonitorSchedule().catch(() => {});
   });
 
   initTabs();
@@ -328,18 +402,25 @@ function init() {
     resetStyles.addEventListener("click", () => resetStylesToDefaults());
   }
 
-  loadMeta().catch((e) => setAuthStatus(e.message, false));
-  loadGoogle().catch(() => {});
-  loadAlertStyle().catch((e) => {
-    const hint =
-      e.status === 401 || e.status === 403
-        ? "Token inválido ou ausente — defina o Bearer acima para editar mensagens."
-        : e.message || "Não foi possível carregar os templates.";
-    ["stylePreviewMeta", "stylePreviewGoogle"].forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = hint;
+  const saveSchedule = document.getElementById("saveSchedule");
+  if (saveSchedule) {
+    saveSchedule.addEventListener("click", () => {
+      saveMonitorSchedule().catch((e) => setAuthStatus(e.message, false));
+    });
+  }
+
+  document.querySelectorAll("[data-run]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const platform = btn.getAttribute("data-run") || "both";
+      const force = btn.getAttribute("data-force") === "true";
+      runMonitor(platform, force).catch((e) => setAuthStatus(e.message, false));
     });
   });
+
+  loadMeta().catch((e) => setAuthStatus(e.message, false));
+  loadGoogle().catch(() => {});
+  loadAlertStyle().catch(() => {});
+  loadMonitorSchedule().catch(() => {});
 }
 
 document.addEventListener("DOMContentLoaded", init);

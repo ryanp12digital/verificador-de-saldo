@@ -39,6 +39,15 @@ from alert_message_style import (
     merge_style_with_override,
     persist_styles,
 )
+from dashboard_scheduler import start_dashboard_scheduler
+from monitor_runner import run_google_monitor, run_meta_monitor
+from monitor_schedule import (
+    default_schedule,
+    load_schedule,
+    persist_schedule,
+    sanitize_schedule,
+    times_to_cron_expr,
+)
 from db import is_database_configured, list_accounts, migrate, replace_accounts
 from meta_ads_balance import (
     fetch_meta_balances_for_ids,
@@ -404,6 +413,61 @@ def put_alert_style() -> Any:
     return jsonify({"ok": True, "saved": where})
 
 
+@app.get("/api/monitor/schedule")
+@require_dashboard_token
+def get_monitor_schedule() -> Any:
+    sched = load_schedule(REPO_ROOT)
+    return jsonify(
+        {
+            **sched,
+            "cron": times_to_cron_expr(sched.get("times") or []),
+            "defaults": default_schedule(),
+        }
+    )
+
+
+@app.put("/api/monitor/schedule")
+@require_dashboard_token
+def put_monitor_schedule() -> Any:
+    body = request.get_json(force=True, silent=False) or {}
+    try:
+        clean = sanitize_schedule(body)
+        where = persist_schedule(clean, REPO_ROOT)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "saved": where,
+            "schedule": clean,
+            "cron": times_to_cron_expr(clean["times"]),
+            "note": (
+                "No Docker, reinicie o container para o supercronic usar o novo CRON. "
+                "Com a dashboard ativa, o agendador interno aplica os horarios sem reiniciar."
+            ),
+        }
+    )
+
+
+@app.post("/api/monitor/run")
+@require_dashboard_token
+def post_monitor_run() -> Any:
+    body = request.get_json(force=True, silent=False) or {}
+    platform = str(body.get("platform") or "both").strip().lower()
+    force = bool(body.get("force", False))
+    dry_run = bool(body.get("dry_run", False))
+
+    if platform not in ("meta", "google", "both"):
+        return jsonify({"error": "platform deve ser meta, google ou both"}), 400
+
+    out: dict[str, Any] = {"ok": True, "force": force, "dry_run": dry_run}
+    if platform in ("meta", "both"):
+        out["meta"] = run_meta_monitor(force_send=force, dry_run=dry_run).to_dict()
+    if platform in ("google", "both"):
+        out["google"] = run_google_monitor(force_send=force, dry_run=dry_run).to_dict()
+    return jsonify(out)
+
+
 @app.post("/api/alert-style/preview")
 @require_dashboard_token
 def post_alert_style_preview() -> Any:
@@ -450,6 +514,13 @@ def main() -> None:
             migrate()
         except Exception as exc:  # noqa: BLE001
             print(f"AVISO: migracao Postgres falhou: {exc}", file=sys.stderr)
+    try:
+        sched = load_schedule(REPO_ROOT)
+        cron = times_to_cron_expr(sched.get("times") or [])
+        print(f"Agendamento: {sched.get('times')} ({sched.get('timezone')}) -> cron {cron}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"AVISO: schedule: {exc}", file=sys.stderr)
+    start_dashboard_scheduler()
     app.run(host=host, port=port, debug=False)
 
 

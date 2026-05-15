@@ -1,10 +1,17 @@
 #!/usr/bin/env sh
 set -eu
 
-CRON_SCHEDULE="${CRON_SCHEDULE:-0 8,18 * * *}"
 CRON_FILE="/tmp/crontab"
 
-echo "🚀 [START] Container de monitoramento Meta Ads iniciado"
+if [ -f /app/config/monitor_schedule.json ]; then
+  CRON_FROM_FILE="$(python -c "import sys; sys.path.insert(0,'/app/execution'); from monitor_schedule import cron_expression; print(cron_expression())" 2>/dev/null || true)"
+  if [ -n "${CRON_FROM_FILE}" ]; then
+    CRON_SCHEDULE="${CRON_FROM_FILE}"
+  fi
+fi
+CRON_SCHEDULE="${CRON_SCHEDULE:-0 8,18 * * *}"
+
+echo "🚀 [START] Container de monitoramento Meta/Google Ads iniciado"
 echo "⏰ [CRON] Agendamento configurado: ${CRON_SCHEDULE}"
 
 if [ "${DASHBOARD_ENABLED:-false}" = "true" ]; then

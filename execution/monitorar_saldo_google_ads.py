@@ -40,6 +40,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Nao envia mensagem no grupo. Apenas imprime a mensagem gerada.",
     )
+    parser.add_argument(
+        "--force-send",
+        action="store_true",
+        help="Envia relatorio com todas as contas monitoradas, mesmo acima do limite.",
+    )
     return parser.parse_args()
 
 
@@ -103,127 +108,39 @@ def main() -> int:
     load_dotenv()
     args = parse_args()
     log_info("Iniciando rotina de monitoramento Google Ads")
+    if args.force_send:
+        log_warn("Modo force-send: todas as contas monitoradas entram na mensagem.")
 
-    try:
-        evolution_base_url = env_required("EVOLUTION_SERVER_URL")
-        evolution_api_key = env_required("EVOLUTION_API_KEY")
-        evolution_instance = env_required("EVOLUTION_INSTANCE")
-        evolution_group_id = env_required("EVOLUTION_GROUP_ID")
-        max_retries = env_int("MAX_RETRIES", 3)
-        retry_delay_seconds = env_int("RETRY_DELAY_SECONDS", 300)
-        tz_name = os.getenv("TZ", "America/Sao_Paulo").strip() or "America/Sao_Paulo"
-        json_path = (
-            os.getenv("GOOGLE_ACCOUNTS_JSON_PATH", "config/google_ad_accounts.json").strip()
-            or "config/google_ad_accounts.json"
-        )
-    except ValueError as exc:
-        log_error(f"Erro de configuracao: {exc}")
-        return 2
+    from monitor_runner import run_google_monitor
 
-    try:
-        accounts_cfg, source_accounts, strict_whitelist = load_google_accounts_for_monitor(
-            json_path
-        )
-    except Exception as exc:  # noqa: BLE001
-        log_error(f"Erro ao carregar lista de contas Google: {exc}")
-        return 2
-
-    log_info(
-        f"Configuracao carregada | fonte={source_accounts} | "
-        f"limite_alerta={args.alert_threshold:.2f} | limite_proximo={args.near_threshold:.2f}"
-    )
-
-    if strict_whitelist and not accounts_cfg:
-        log_warn("Nenhuma conta Google habilitada no Postgres. Encerrando sem varredura.")
-        return 0
-
-    if not strict_whitelist and not accounts_cfg:
-        log_warn("Nenhuma conta Google configurada (JSON ausente ou vazio). Encerrando.")
-        return 0
-
-    try:
-        from google_ads_balance import build_client_config
-
-        build_client_config()
-    except ValueError as exc:
-        log_error(f"Google Ads nao configurado: {exc}")
-        return 2
-
-    low: List[LowGoogleAccount] = []
-    errors = 0
-
-    for entry in accounts_cfg:
-        cid = entry["customer_id"]
-        label = entry.get("name") or cid
-        row = fetch_balance_for_customer(cid)
-        if row.status == "erro":
-            log_error(f"{label} ({cid}): {row.message}")
-            errors += 1
-            continue
-        if row.status == "indisponivel":
-            log_warn(f"{label} ({cid}): {row.message}")
-            continue
-        if row.balance is None:
-            continue
-        if row.balance <= args.alert_threshold:
-            low.append(
-                LowGoogleAccount(
-                    customer_id=cid,
-                    name=row.name or label,
-                    currency=row.currency or "?",
-                    balance=row.balance,
-                    source=row.source,
-                )
-            )
-
-    summary = {
-        "contas_configuradas": len(accounts_cfg),
-        "contas_com_alerta": len(low),
-        "erros_consulta": errors,
-        "limite_alerta": args.alert_threshold,
-    }
-    log_info("Resumo da varredura:")
-    safe_print(json.dumps(summary, ensure_ascii=True, indent=2))
-
-    if not low:
-        log_success("Nenhuma conta abaixo do limite. Nenhuma mensagem enviada ao grupo.")
-        return 0
-
-    now_str = get_now_in_timezone(tz_name).strftime("%d/%m/%Y %H:%M")
-    style = load_merged_style("google")
-    message = build_google_whatsapp_message(
-        low=low,
+    result = run_google_monitor(
+        force_send=args.force_send,
+        dry_run=args.dry_run,
         alert_threshold=args.alert_threshold,
         near_threshold=args.near_threshold,
-        tz_name=tz_name,
-        now_str=now_str,
-        style=style,
     )
 
-    if args.dry_run:
-        log_info("MODO DRY-RUN ativo. Mensagem sera exibida, sem envio ao grupo.")
-        safe_print(message)
+    log_info("Resumo da varredura:")
+    safe_print(json.dumps(result.summary, ensure_ascii=True, indent=2))
+
+    if result.error:
+        log_error(result.error)
+        return result.exit_code
+
+    if not result.message and not result.sent:
+        log_success("Nenhuma conta para alertar. Nenhuma mensagem enviada ao grupo.")
         return 0
 
-    session = requests.Session()
-    try:
-        log_info("Enviando alerta para o grupo no WhatsApp...")
-        send_group_message(
-            session,
-            base_url=evolution_base_url,
-            api_key=evolution_api_key,
-            instance=evolution_instance,
-            group_id=evolution_group_id,
-            message=message,
-            max_retries=max_retries,
-            retry_delay_seconds=retry_delay_seconds,
-        )
-    except Exception as exc:  # noqa: BLE001
-        log_error(f"Erro ao enviar mensagem para o grupo: {exc}")
-        return 1
+    if args.dry_run and result.message:
+        log_info("MODO DRY-RUN ativo. Mensagem sera exibida, sem envio ao grupo.")
+        safe_print(result.message)
+        return 0
 
-    log_success("Mensagem enviada com sucesso para o grupo.")
-    return 0
+    if result.sent:
+        log_success("Mensagem enviada com sucesso para o grupo.")
+        return 0
+
+    return result.exit_code
 
 
 if __name__ == "__main__":

@@ -1,0 +1,6 @@
+{
+  "times": ["08:00", "18:00"],
+  "timezone": "America/Sao_Paulo",
+  "meta_enabled": true,
+  "google_enabled": true
+}

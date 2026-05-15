@@ -608,6 +608,79 @@ button.danger:hover {
   display: none;
 }
 
+/* Agendamento */
+.card-schedule {
+  animation-delay: 0.1s;
+}
+
+.card-icon-clock {
+  background: rgba(120, 160, 255, 0.1);
+  color: #9eb8ff;
+  border-color: rgba(120, 160, 255, 0.22);
+}
+
+.hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+}
+
+.schedule-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin: 1.1rem 0 1.25rem;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+
+.schedule-actions {
+  margin-bottom: 1.5rem;
+}
+
+.force-block {
+  padding-top: 1.35rem;
+  border-top: 1px solid var(--border-strong);
+}
+
+.force-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.force-hint {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-soft);
+}
+
+.force-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+}
+
+.output-run {
+  min-height: 4rem;
+  max-height: 240px;
+}
+
 /* Mensagens ao grupo */
 .card-messages {
   animation-delay: 0.18s;
