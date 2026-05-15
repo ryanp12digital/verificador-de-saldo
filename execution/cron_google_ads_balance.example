@@ -1,0 +1,4 @@
+# Exemplo de CRON para Google Ads (VPS Linux)
+# Ajuste o caminho do projeto. Requer variaveis GOOGLE_ADS_* no .env.
+
+0 9,19 * * * cd /caminho/do/projeto && python execution/monitorar_saldo_google_ads.py

@@ -10,6 +10,8 @@ Projeto inicializado com arquitetura de 3 camadas para separar:
 
 - `directives/`: SOPs em Markdown
 - `execution/`: scripts Python determinísticos
+- `web/`: dashboard HTML/CSS/JS (servida pelo Flask)
+- `config/`: JSONs de contas (fallback quando nao ha Postgres)
 - `.tmp/`: arquivos temporarios e regeneraveis
 - `.env`: variaveis de ambiente
 
@@ -20,10 +22,40 @@ Projeto inicializado com arquitetura de 3 camadas para separar:
 
    - `pip install -r requirements.txt`
 
-3. Ajuste as variaveis no `.env`.
-4. Execute o script base:
+3. Copie `.env.example` para `.env` e ajuste as variaveis.
+4. Script base (legado):
 
    - `python execution/verificar_saldo.py --limite 100`
+
+## PostgreSQL (lista de contas)
+
+Se `DATABASE_URL` **ou** `POSTGRES_HOST` + `POSTGRES_USER` + `POSTGRES_PASSWORD` + `POSTGRES_DB` estiverem definidos:
+
+- As contas **Meta** e **Google Ads** monitoradas vêm da tabela `monitored_accounts` (criada automaticamente na primeira subida da dashboard ou ao rodar os monitors).
+- Lista vazia no banco significa **nenhuma** conta monitorada (não há fallback “todas as contas” do Meta).
+
+Importar uma vez a partir do JSON legado:
+
+- `python execution/import_meta_json_to_db.py`
+
+Sem Postgres, o comportamento antigo permanece: `config/meta_ad_accounts.json` e `META_ALLOWED_ACCOUNT_IDS` / `META_ACCOUNT_LABELS`.
+
+## Dashboard (configuracao + saldos ao vivo)
+
+1. Defina `DASHBOARD_API_TOKEN` no `.env`.
+2. Na raiz do repositorio:
+
+   - `python execution/dashboard_server.py`
+
+3. Abra `http://127.0.0.1:5050` (ou `DASHBOARD_HOST` / `DASHBOARD_PORT`). Informe o token na tela; ele fica salvo no `localStorage` do navegador.
+
+Rotas da API (header `Authorization: Bearer <DASHBOARD_API_TOKEN>`):
+
+- `GET/PUT /api/accounts/meta` e `GET/PUT /api/accounts/google`
+- `GET /api/balances/meta` e `GET /api/balances/google` (usam credenciais Meta / Google do `.env`)
+- `GET /api/health` (sem token)
+
+Seguranca: por padrao o servidor escuta em `127.0.0.1`. Em VPS publica use TLS/reverse proxy e token forte.
 
 ## Automacao Meta Ads (VPS + CRON)
 
@@ -36,6 +68,17 @@ Projeto inicializado com arquitetura de 3 camadas para separar:
   - `python execution/monitorar_saldo_meta_ads.py --dry-run`
 - CRON de exemplo:
   - `execution/cron_meta_ads_balance.example`
+
+## Google Ads (monitoramento)
+
+- Script: `execution/monitorar_saldo_google_ads.py`
+- Usa orcamento `account_budget` quando disponivel; contas so faturamento automatico podem retornar `indisponivel`.
+- OAuth (uma vez, para obter `GOOGLE_ADS_REFRESH_TOKEN`):
+
+  - `python execution/google_ads_setup_oauth.py`
+
+- CRON de exemplo: `execution/cron_google_ads_balance.example`
+- JSON fallback: `config/google_ad_accounts.json` (`accounts[].customer_id`, `name`)
 
 ## Producao na VPS
 
@@ -53,35 +96,15 @@ Projeto inicializado com arquitetura de 3 camadas para separar:
 ## Deploy no EasyPanel (Dockerfile)
 
 - Build method: `Dockerfile`
-- Arquivo: `Dockerfile` na raiz
-- Container mode: app/worker em execucao continua
 - O agendamento roda dentro do container via `supercronic`
-- Variaveis obrigatorias no painel:
-  - `META_ACCESS_TOKEN`
-  - `META_BUSINESS_ID`
-  - `EVOLUTION_SERVER_URL`
-  - `EVOLUTION_API_KEY`
-  - `EVOLUTION_INSTANCE`
-  - `EVOLUTION_GROUP_ID`
-- Variaveis opcionais:
-  - `TZ=America/Sao_Paulo`
-  - `CRON_SCHEDULE=0 8,18 * * *`
-  - `ALERT_THRESHOLD=200`
-  - `NEAR_THRESHOLD=120`
-  - `MAX_RETRIES=3`
-  - `RETRY_DELAY_SECONDS=300`
-  - `META_ACCOUNTS_JSON_PATH=config/meta_ad_accounts.json`
-  - `META_ALLOWED_ACCOUNT_IDS=133...,535...` (filtra somente contas desejadas)
-  - `META_ACCOUNT_LABELS=133...=Cliente A;535...=Cliente B` (nome amigavel)
+- Variaveis obrigatorias no painel (Meta + Evolution): ver `.env.example`
+- Opcional: `DASHBOARD_ENABLED=true` e `DASHBOARD_HOST=0.0.0.0` para subir a dashboard em background no mesmo container (ver `scripts/entrypoint.sh`)
+- Postgres: o container precisa de rota de rede ate o host/porta do banco; passe `DATABASE_URL` ou `POSTGRES_*`
 
-## Controle de contas por JSON
+## Controle de contas por JSON (sem Postgres)
 
-- Arquivo padrao: `config/meta_ad_accounts.json`
-- Estrutura:
-  - `accounts`: lista com `name` e `id`
-- Exemplo:
-  - `{ "accounts": [ { "name": "Cliente A", "id": "123" } ] }`
-- Prioridade de leitura:
+- Meta: `config/meta_ad_accounts.json` — `accounts`: `name`, `id`
+- Prioridade sem Postgres:
   1. JSON em `META_ACCOUNTS_JSON_PATH`
   2. Fallback para `META_ALLOWED_ACCOUNT_IDS` e `META_ACCOUNT_LABELS`
 

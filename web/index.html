@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Monitor de contas — Meta & Google Ads</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Monitor de contas</h1>
+    <p class="muted">Configure contas Meta e Google Ads. Saldos ao vivo usam credenciais do servidor.</p>
+  </header>
+
+  <section class="panel auth-panel">
+    <label for="apiToken">Token da API (<code>DASHBOARD_API_TOKEN</code>)</label>
+    <div class="row">
+      <input type="password" id="apiToken" autocomplete="off" placeholder="Bearer token" />
+      <button type="button" id="saveToken">Salvar no navegador</button>
+    </div>
+    <p class="hint" id="authStatus"></p>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab active" data-tab="meta" role="tab" aria-selected="true">Meta Ads</button>
+    <button type="button" class="tab" data-tab="google" role="tab" aria-selected="false">Google Ads</button>
+  </nav>
+
+  <section id="panel-meta" class="panel tab-panel active">
+    <div class="toolbar">
+      <span class="badge" id="metaSource"></span>
+      <button type="button" id="metaReload">Recarregar lista</button>
+      <button type="button" id="metaAdd">Adicionar linha</button>
+      <button type="button" class="primary" id="metaSave">Salvar</button>
+      <button type="button" id="metaBalances">Atualizar saldos</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="metaTable">
+        <thead>
+          <tr>
+            <th>ID da conta</th>
+            <th>Nome</th>
+            <th>Ativa</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <pre class="output" id="metaBalancesOut"></pre>
+  </section>
+
+  <section id="panel-google" class="panel tab-panel">
+    <div class="toolbar">
+      <span class="badge" id="googleSource"></span>
+      <button type="button" id="googleReload">Recarregar lista</button>
+      <button type="button" id="googleAdd">Adicionar linha</button>
+      <button type="button" class="primary" id="googleSave">Salvar</button>
+      <button type="button" id="googleBalances">Atualizar saldos</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table" id="googleTable">
+        <thead>
+          <tr>
+            <th>Customer ID (10 dígitos)</th>
+            <th>Nome</th>
+            <th>Ativa</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <pre class="output" id="googleBalancesOut"></pre>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>
