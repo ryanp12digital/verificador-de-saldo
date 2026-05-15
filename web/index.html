@@ -4,75 +4,126 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Monitor de contas — Meta & Google Ads</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header class="header">
-    <h1>Monitor de contas</h1>
-    <p class="muted">Configure contas Meta e Google Ads. Saldos ao vivo usam credenciais do servidor.</p>
-  </header>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="glow glow-1" aria-hidden="true"></div>
+  <div class="glow glow-2" aria-hidden="true"></div>
 
-  <section class="panel auth-panel">
-    <label for="apiToken">Token da API (<code>DASHBOARD_API_TOKEN</code>)</label>
-    <div class="row">
-      <input type="password" id="apiToken" autocomplete="off" placeholder="Bearer token" />
-      <button type="button" id="saveToken">Salvar no navegador</button>
-    </div>
-    <p class="hint" id="authStatus"></p>
-  </section>
+  <div class="app-shell">
+    <header class="hero">
+      <p class="eyebrow">Painel interno · saldos em tempo real</p>
+      <h1 class="hero-title">Monitor de contas</h1>
+      <p class="hero-lead">
+        Configure contas <strong>Meta Ads</strong> e <strong>Google Ads</strong>.
+        As consultas de saldo usam as credenciais do servidor — este navegador só envia o token de acesso à API.
+      </p>
+    </header>
 
-  <nav class="tabs" role="tablist">
-    <button type="button" class="tab active" data-tab="meta" role="tab" aria-selected="true">Meta Ads</button>
-    <button type="button" class="tab" data-tab="google" role="tab" aria-selected="false">Google Ads</button>
-  </nav>
+    <section class="card card-auth" aria-labelledby="auth-heading">
+      <div class="card-head">
+        <span class="card-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        </span>
+        <div>
+          <h2 id="auth-heading" class="card-title">Acesso à API</h2>
+          <p class="card-sub">Defina o mesmo valor de <code>DASHBOARD_API_TOKEN</code> no EasyPanel / <code>.env</code>.</p>
+        </div>
+      </div>
+      <label class="field-label" for="apiToken">Token (Bearer)</label>
+      <div class="token-row">
+        <input type="password" id="apiToken" class="input input-token" autocomplete="off" spellcheck="false" placeholder="Cole o token secreto" />
+        <button type="button" class="btn btn-ghost" id="saveToken">Salvar no navegador</button>
+      </div>
+      <div class="auth-feedback" id="authStatus" role="status" aria-live="polite"></div>
+    </section>
 
-  <section id="panel-meta" class="panel tab-panel active">
-    <div class="toolbar">
-      <span class="badge" id="metaSource"></span>
-      <button type="button" id="metaReload">Recarregar lista</button>
-      <button type="button" id="metaAdd">Adicionar linha</button>
-      <button type="button" class="primary" id="metaSave">Salvar</button>
-      <button type="button" id="metaBalances">Atualizar saldos</button>
+    <div class="tabs-wrap">
+      <nav class="tabs" role="tablist" aria-label="Plataforma">
+        <button type="button" class="tab active" data-tab="meta" role="tab" aria-selected="true" id="tab-meta">Meta Ads</button>
+        <button type="button" class="tab" data-tab="google" role="tab" aria-selected="false" id="tab-google">Google Ads</button>
+      </nav>
     </div>
-    <div class="table-wrap">
-      <table class="data-table" id="metaTable">
-        <thead>
-          <tr>
-            <th>ID da conta</th>
-            <th>Nome</th>
-            <th>Ativa</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <pre class="output" id="metaBalancesOut"></pre>
-  </section>
 
-  <section id="panel-google" class="panel tab-panel">
-    <div class="toolbar">
-      <span class="badge" id="googleSource"></span>
-      <button type="button" id="googleReload">Recarregar lista</button>
-      <button type="button" id="googleAdd">Adicionar linha</button>
-      <button type="button" class="primary" id="googleSave">Salvar</button>
-      <button type="button" id="googleBalances">Atualizar saldos</button>
-    </div>
-    <div class="table-wrap">
-      <table class="data-table" id="googleTable">
-        <thead>
-          <tr>
-            <th>Customer ID (10 dígitos)</th>
-            <th>Nome</th>
-            <th>Ativa</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </div>
-    <pre class="output" id="googleBalancesOut"></pre>
-  </section>
+    <section id="panel-meta" class="card card-panel tab-panel active" role="tabpanel" aria-labelledby="tab-meta">
+      <div class="toolbar">
+        <span class="badge" id="metaSource"></span>
+        <div class="toolbar-actions">
+          <button type="button" class="btn btn-muted" id="metaReload">Recarregar</button>
+          <button type="button" class="btn btn-muted" id="metaAdd">Nova linha</button>
+          <button type="button" class="btn btn-accent" id="metaSave">Salvar lista</button>
+          <button type="button" class="btn btn-outline" id="metaBalances">Atualizar saldos</button>
+        </div>
+      </div>
+
+      <div id="metaEmpty" class="empty-state" hidden>
+        <p class="empty-title">Nenhuma conta carregada</p>
+        <p class="empty-text">Verifique o token acima ou adicione linhas e salve.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table" id="metaTable">
+          <thead>
+            <tr>
+              <th class="col-id">ID da conta</th>
+              <th>Nome</th>
+              <th class="col-check">Ativa</th>
+              <th class="col-action"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="output-wrap">
+        <span class="output-label">Resposta · saldos Meta</span>
+        <pre class="output" id="metaBalancesOut"></pre>
+      </div>
+    </section>
+
+    <section id="panel-google" class="card card-panel tab-panel" role="tabpanel" aria-labelledby="tab-google">
+      <div class="toolbar">
+        <span class="badge" id="googleSource"></span>
+        <div class="toolbar-actions">
+          <button type="button" class="btn btn-muted" id="googleReload">Recarregar</button>
+          <button type="button" class="btn btn-muted" id="googleAdd">Nova linha</button>
+          <button type="button" class="btn btn-accent" id="googleSave">Salvar lista</button>
+          <button type="button" class="btn btn-outline" id="googleBalances">Atualizar saldos</button>
+        </div>
+      </div>
+
+      <div id="googleEmpty" class="empty-state" hidden>
+        <p class="empty-title">Nenhuma conta Google</p>
+        <p class="empty-text">Inclua customer IDs (10 dígitos) ou cadastre na VPS com Postgres.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table" id="googleTable">
+          <thead>
+            <tr>
+              <th class="col-id">Customer ID</th>
+              <th>Nome</th>
+              <th class="col-check">Ativa</th>
+              <th class="col-action"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="output-wrap">
+        <span class="output-label">Resposta · saldos Google</span>
+        <pre class="output" id="googleBalancesOut"></pre>
+      </div>
+    </section>
+  </div>
 
   <script src="/app.js"></script>
 </body>

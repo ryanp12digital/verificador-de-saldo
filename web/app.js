@@ -8,8 +8,14 @@ function getToken() {
 function setAuthStatus(msg, ok) {
   const el = document.getElementById("authStatus");
   if (!el) return;
-  el.textContent = msg;
-  el.style.color = ok ? "#86efac" : "#fca5a5";
+  el.textContent = msg || "";
+  el.classList.remove("is-ok", "is-err");
+  if (msg) el.classList.add(ok ? "is-ok" : "is-err");
+}
+
+function setEmptyVisible(panelPrefix, visible) {
+  const el = document.getElementById(`${panelPrefix}Empty`);
+  if (el) el.hidden = !visible;
 }
 
 async function api(path, options = {}) {
@@ -86,7 +92,7 @@ function addRow(tableId, row = {}) {
   const tdRm = document.createElement("td");
   const btn = document.createElement("button");
   btn.type = "button";
-  btn.className = "danger row-remove";
+  btn.className = "btn danger row-remove";
   btn.textContent = "Remover";
   btn.addEventListener("click", () => tr.remove());
   tdRm.appendChild(btn);
@@ -112,20 +118,24 @@ function readTable(tableId) {
 
 async function loadMeta() {
   const data = await api("/api/accounts/meta");
-  document.getElementById("metaSource").textContent = `Fonte: ${data.source}`;
+  document.getElementById("metaSource").textContent = data.source ? `Fonte · ${data.source}` : "—";
   const tb = tbody("metaTable");
   tb.innerHTML = "";
-  (data.accounts || []).forEach((r) => addRow("metaTable", r));
-  if (!data.accounts || data.accounts.length === 0) addRow("metaTable", {});
+  const list = data.accounts || [];
+  list.forEach((r) => addRow("metaTable", r));
+  if (list.length === 0) addRow("metaTable", {});
+  setEmptyVisible("meta", list.length === 0);
 }
 
 async function loadGoogle() {
   const data = await api("/api/accounts/google");
-  document.getElementById("googleSource").textContent = `Fonte: ${data.source}`;
+  document.getElementById("googleSource").textContent = data.source ? `Fonte · ${data.source}` : "—";
   const tb = tbody("googleTable");
   tb.innerHTML = "";
-  (data.accounts || []).forEach((r) => addRow("googleTable", r));
-  if (!data.accounts || data.accounts.length === 0) addRow("googleTable", {});
+  const list = data.accounts || [];
+  list.forEach((r) => addRow("googleTable", r));
+  if (list.length === 0) addRow("googleTable", {});
+  setEmptyVisible("google", list.length === 0);
 }
 
 async function saveMeta() {
