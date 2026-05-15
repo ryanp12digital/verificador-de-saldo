@@ -40,6 +40,9 @@ def database_url_from_env() -> Optional[str]:
 
 
 def is_database_configured() -> bool:
+    flag = (os.getenv("DISABLE_DATABASE") or "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return False
     return database_url_from_env() is not None
 
 

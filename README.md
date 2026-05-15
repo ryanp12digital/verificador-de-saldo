@@ -34,6 +34,8 @@ Se `DATABASE_URL` **ou** `POSTGRES_HOST` + `POSTGRES_USER` + `POSTGRES_PASSWORD`
 - As contas **Meta** e **Google Ads** monitoradas vêm da tabela `monitored_accounts` (criada automaticamente na primeira subida da dashboard ou ao rodar os monitors).
 - Lista vazia no banco significa **nenhuma** conta monitorada (não há fallback “todas as contas” do Meta).
 
+**Teste no seu PC com host de banco só acessível na VPS (ex.: nome interno Docker):** a conexão falha com erro de DNS. Opções: use um host alcançável (`localhost` + túnel, IP público, etc.) **ou** defina `DISABLE_DATABASE=true` no `.env` (ou só na linha de comando) para forçar leitura dos JSONs legados e validar tokens Meta/Evolution/Google localmente.
+
 Importar uma vez a partir do JSON legado:
 
 - `python execution/import_meta_json_to_db.py`

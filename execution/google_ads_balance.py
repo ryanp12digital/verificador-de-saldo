@@ -21,6 +21,8 @@ def _env_required(name: str) -> str:
 
 def build_client_config() -> Dict[str, Any]:
     login = os.getenv("GOOGLE_ADS_LOGIN_CUSTOMER_ID", "").strip()
+    if not login:
+        login = os.getenv("GOOGLE_ADS_MCC_ID", "").strip()
     cfg: Dict[str, Any] = {
         "developer_token": _env_required("GOOGLE_ADS_DEVELOPER_TOKEN"),
         "client_id": _env_required("GOOGLE_ADS_CLIENT_ID"),
