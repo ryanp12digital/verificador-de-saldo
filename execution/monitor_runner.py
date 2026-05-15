@@ -51,9 +51,9 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _thresholds() -> tuple[float, float]:
-    alert = float(os.getenv("ALERT_THRESHOLD", "200").strip() or "200")
-    near = float(os.getenv("NEAR_THRESHOLD", "120").strip() or "120")
-    return alert, near
+    from monitor_thresholds import load_threshold_pair
+
+    return load_threshold_pair()
 
 
 def run_meta_monitor(

@@ -17,6 +17,10 @@ from google_ads_balance import fetch_balance_for_customer
 
 
 def parse_args() -> argparse.Namespace:
+    load_dotenv()
+    from monitor_thresholds import load_thresholds
+
+    limits = load_thresholds()
     parser = argparse.ArgumentParser(
         description=(
             "Monitora saldo/orcamento Google Ads (account_budget) e envia alerta "
@@ -26,13 +30,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--alert-threshold",
         type=float,
-        default=200.0,
+        default=limits["alert_threshold"],
         help="Dispara alerta quando saldo for menor ou igual a esse valor (na moeda da conta).",
     )
     parser.add_argument(
         "--near-threshold",
         type=float,
-        default=120.0,
+        default=limits["near_threshold"],
         help="Faixa para marcar saldo como proximo de 100 (mesma unidade do saldo).",
     )
     parser.add_argument(

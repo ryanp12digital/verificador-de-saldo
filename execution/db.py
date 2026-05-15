@@ -92,6 +92,12 @@ CREATE TABLE IF NOT EXISTS monitor_schedule (
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS monitor_thresholds (
+    id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 
@@ -256,6 +262,38 @@ def upsert_monitor_schedule_config(config: dict[str, Any]) -> None:
             cur.execute(
                 """
                 INSERT INTO monitor_schedule (id, config)
+                VALUES (1, %s)
+                ON CONFLICT (id) DO UPDATE SET
+                    config = EXCLUDED.config,
+                    updated_at = NOW()
+                """,
+                (Json(config),),
+            )
+
+
+def get_monitor_thresholds_config() -> Optional[dict[str, Any]]:
+    if not is_database_configured():
+        return None
+    with get_connection() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT config FROM monitor_thresholds WHERE id = 1")
+            row = cur.fetchone()
+    if not row or row.get("config") is None:
+        return None
+    cfg = row["config"]
+    if isinstance(cfg, str):
+        cfg = json.loads(cfg)
+    return cfg if isinstance(cfg, dict) else None
+
+
+def upsert_monitor_thresholds_config(config: dict[str, Any]) -> None:
+    if not is_database_configured():
+        raise RuntimeError("PostgreSQL nao configurado.")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO monitor_thresholds (id, config)
                 VALUES (1, %s)
                 ON CONFLICT (id) DO UPDATE SET
                     config = EXCLUDED.config,

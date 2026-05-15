@@ -1,9 +1,17 @@
 #!/usr/bin/env sh
 set -eu
 
-ALERT_THRESHOLD="${ALERT_THRESHOLD:-200}"
-NEAR_THRESHOLD="${NEAR_THRESHOLD:-120}"
 TZ_VALUE="${TZ:-America/Sao_Paulo}"
+
+THRESHOLDS="$(python -c "
+import sys
+sys.path.insert(0, '/app/execution')
+from monitor_thresholds import load_threshold_pair
+a, n = load_threshold_pair()
+print(a, n)
+" 2>/dev/null || echo "200 120")"
+ALERT_THRESHOLD="$(echo "$THRESHOLDS" | awk '{print $1}')"
+NEAR_THRESHOLD="$(echo "$THRESHOLDS" | awk '{print $2}')"
 
 META_ENABLED=1
 GOOGLE_ENABLED=1

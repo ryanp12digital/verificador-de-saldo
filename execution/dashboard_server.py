@@ -48,6 +48,13 @@ from monitor_schedule import (
     sanitize_schedule,
     times_to_cron_expr,
 )
+from monitor_thresholds import (
+    default_thresholds,
+    load_threshold_pair,
+    load_thresholds,
+    persist_thresholds,
+    sanitize_thresholds,
+)
 from db import is_database_configured, list_accounts, migrate, replace_accounts
 from meta_ads_balance import (
     fetch_meta_balances_for_ids,
@@ -369,20 +376,21 @@ def _fake_google_account() -> SimpleNamespace:
 def get_alert_style() -> Any:
     payload = get_full_style_payload(REPO_ROOT)
     now_str, tz_name = _preview_now_strings()
+    alert_t, near_t = load_threshold_pair(REPO_ROOT)
     style_m = load_merged_style("meta", REPO_ROOT)
     style_g = load_merged_style("google", REPO_ROOT)
     preview_meta = build_meta_whatsapp_message(
         low_balances=[_fake_meta_account()],
-        alert_threshold=200.0,
-        near_threshold=120.0,
+        alert_threshold=alert_t,
+        near_threshold=near_t,
         tz_name=tz_name,
         now_str=now_str,
         style=style_m,
     )
     preview_google = build_google_whatsapp_message(
         low=[_fake_google_account()],
-        alert_threshold=200.0,
-        near_threshold=120.0,
+        alert_threshold=alert_t,
+        near_threshold=near_t,
         tz_name=tz_name,
         now_str=now_str,
         style=style_g,
@@ -390,6 +398,7 @@ def get_alert_style() -> Any:
     return jsonify(
         {
             **payload,
+            "thresholds": load_thresholds(REPO_ROOT),
             "defaults": {"meta": DEFAULT_META, "google": DEFAULT_GOOGLE},
             "help": keys_help(),
             "preview_meta": preview_meta,
@@ -417,11 +426,14 @@ def put_alert_style() -> Any:
 @require_dashboard_token
 def get_monitor_schedule() -> Any:
     sched = load_schedule(REPO_ROOT)
+    thresholds = load_thresholds(REPO_ROOT)
     return jsonify(
         {
             **sched,
             "cron": times_to_cron_expr(sched.get("times") or []),
             "defaults": default_schedule(),
+            "alert_threshold": thresholds["alert_threshold"],
+            "near_threshold": thresholds["near_threshold"],
         }
     )
 
@@ -444,6 +456,35 @@ def put_monitor_schedule() -> Any:
             "note": (
                 "No Docker, reinicie o container para o supercronic usar o novo CRON. "
                 "Com a dashboard ativa, o agendador interno aplica os horarios sem reiniciar."
+            ),
+        }
+    )
+
+
+@app.get("/api/monitor/thresholds")
+@require_dashboard_token
+def get_monitor_thresholds() -> Any:
+    cfg = load_thresholds(REPO_ROOT)
+    return jsonify({**cfg, "defaults": default_thresholds()})
+
+
+@app.put("/api/monitor/thresholds")
+@require_dashboard_token
+def put_monitor_thresholds() -> Any:
+    body = request.get_json(force=True, silent=False) or {}
+    try:
+        clean = sanitize_thresholds(body)
+        where = persist_thresholds(clean, REPO_ROOT)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "saved": where,
+            "thresholds": clean,
+            "note": (
+                "Limites aplicados no CRON, envio manual e mensagens. "
+                "Valores do .env sao sobrescritos apos salvar no painel."
             ),
         }
     )
@@ -475,25 +516,32 @@ def post_alert_style_preview() -> Any:
     meta_ov = body.get("meta") if isinstance(body.get("meta"), dict) else None
     google_ov = body.get("google") if isinstance(body.get("google"), dict) else None
     now_str, tz_name = _preview_now_strings()
+    alert_t, near_t = load_threshold_pair(REPO_ROOT)
     style_m = merge_style_with_override("meta", meta_ov, REPO_ROOT)
     style_g = merge_style_with_override("google", google_ov, REPO_ROOT)
     preview_meta = build_meta_whatsapp_message(
         low_balances=[_fake_meta_account()],
-        alert_threshold=200.0,
-        near_threshold=120.0,
+        alert_threshold=alert_t,
+        near_threshold=near_t,
         tz_name=tz_name,
         now_str=now_str,
         style=style_m,
     )
     preview_google = build_google_whatsapp_message(
         low=[_fake_google_account()],
-        alert_threshold=200.0,
-        near_threshold=120.0,
+        alert_threshold=alert_t,
+        near_threshold=near_t,
         tz_name=tz_name,
         now_str=now_str,
         style=style_g,
     )
-    return jsonify({"preview_meta": preview_meta, "preview_google": preview_google})
+    return jsonify(
+        {
+            "preview_meta": preview_meta,
+            "preview_google": preview_google,
+            "thresholds": {"alert_threshold": alert_t, "near_threshold": near_t},
+        }
+    )
 
 
 @app.get("/")

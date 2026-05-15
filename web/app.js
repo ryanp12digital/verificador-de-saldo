@@ -293,21 +293,63 @@ function collectSchedulePayload() {
   };
 }
 
-async function loadMonitorSchedule() {
-  const data = await api("/api/monitor/schedule");
-  if (data.timezone) scheduleTimezone = data.timezone;
-  applyScheduleToForm(data);
+function applyThresholdsToForm(data) {
+  const alertEl = document.getElementById("alertThreshold");
+  const nearEl = document.getElementById("nearThreshold");
+  if (alertEl && data.alert_threshold != null) alertEl.value = data.alert_threshold;
+  if (nearEl && data.near_threshold != null) nearEl.value = data.near_threshold;
 }
 
-async function saveMonitorSchedule() {
-  const body = collectSchedulePayload();
-  const data = await api("/api/monitor/schedule", {
+function collectThresholdsPayload() {
+  const alertEl = document.getElementById("alertThreshold");
+  const nearEl = document.getElementById("nearThreshold");
+  return {
+    alert_threshold: parseFloat(alertEl?.value || "200"),
+    near_threshold: parseFloat(nearEl?.value || "120"),
+  };
+}
+
+async function loadMonitorThresholds() {
+  const data = await api("/api/monitor/thresholds");
+  applyThresholdsToForm(data);
+}
+
+async function saveMonitorThresholds() {
+  const body = collectThresholdsPayload();
+  const data = await api("/api/monitor/thresholds", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  applyScheduleToForm({ ...data.schedule, cron: data.cron });
-  setAuthStatus(data.note || "Horários salvos.", true);
+  applyThresholdsToForm(data.thresholds || body);
+  return data;
+}
+
+async function loadMonitorSchedule() {
+  const data = await api("/api/monitor/schedule");
+  if (data.timezone) scheduleTimezone = data.timezone;
+  applyScheduleToForm(data);
+  applyThresholdsToForm(data);
+  if (data.alert_threshold == null) {
+    await loadMonitorThresholds().catch(() => {});
+  }
+}
+
+async function saveMonitorSchedule() {
+  const schedBody = collectSchedulePayload();
+  const schedData = await api("/api/monitor/schedule", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(schedBody),
+  });
+  applyScheduleToForm({ ...schedData.schedule, cron: schedData.cron });
+
+  const thData = await saveMonitorThresholds();
+  const msg = [
+    schedData.note || "Agendamento salvo.",
+    thData.note || `Limites: alerta R$ ${thData.thresholds?.alert_threshold}.`,
+  ].join(" ");
+  setAuthStatus(msg, true);
 }
 
 async function runMonitor(platform, force) {

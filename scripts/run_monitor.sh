@@ -21,9 +21,16 @@ mkdir -p "${ROOT_DIR}/.tmp"
 # shellcheck disable=SC1091
 source "${ROOT_DIR}/.env"
 
-ALERT_THRESHOLD="${ALERT_THRESHOLD:-200}"
-NEAR_THRESHOLD="${NEAR_THRESHOLD:-120}"
 TZ_VALUE="${TZ:-America/Sao_Paulo}"
+THRESHOLDS="$("${VENV_PYTHON}" -c "
+import sys
+sys.path.insert(0, '${ROOT_DIR}/execution')
+from monitor_thresholds import load_threshold_pair
+a, n = load_threshold_pair('${ROOT_DIR}')
+print(a, n)
+" 2>/dev/null || echo "200 120")"
+ALERT_THRESHOLD="$(echo "${THRESHOLDS}" | awk '{print $1}')"
+NEAR_THRESHOLD="$(echo "${THRESHOLDS}" | awk '{print $2}')"
 
 {
   if command -v flock >/dev/null 2>&1; then

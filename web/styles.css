@@ -626,6 +626,19 @@ button.danger:hover {
   font-family: var(--font-mono);
 }
 
+.threshold-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem 2rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+@media (max-width: 640px) {
+  .threshold-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .schedule-checks {
   display: flex;
   flex-wrap: wrap;
