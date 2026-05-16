@@ -107,6 +107,21 @@ def migrate() -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(MIGRATION_SQL)
+            cur.execute(
+                """
+                UPDATE alert_message_style
+                SET config = jsonb_set(
+                    config,
+                    '{account_line}',
+                    to_jsonb(replace(
+                        replace(config->>'account_line', ' ({{source}})', ''),
+                        '({{source}})', ''
+                    ))
+                )
+                WHERE provider = 'google'
+                  AND config->>'account_line' LIKE '%{{source}}%'
+                """
+            )
 
 
 def list_accounts(provider: Provider, *, include_disabled: bool = False) -> list[dict[str, Any]]:

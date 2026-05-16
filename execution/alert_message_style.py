@@ -40,7 +40,7 @@ DEFAULT_GOOGLE: Dict[str, str] = {
     "title": "🚨 *Alerta de Saldo - Google Ads*",
     "reference_line": "🕒 Referencia: {{datetime}} ({{timezone}})",
     "criterion_line": "🎯 Criterio: saldo/orcamento restante <= {{alert_threshold}} (moeda da conta)",
-    "account_line": "- {{level}} | {{name}} - Saldo: {{balance}} {{currency}} ({{source}})",
+    "account_line": "- {{level}} | {{name}} - Saldo: {{balance}} {{currency}}",
     "footer": (
         "✅ Acao recomendada: revisar pagamentos / orcamentos das contas listadas.\n"
         "🔗 Google Ads: https://ads.google.com/"
