@@ -57,7 +57,7 @@ def _run_scheduled_job(slot: str, sched: Dict) -> None:
                 run_meta = True
         if run_meta:
             logger.info("Scheduler: executando monitor Meta (%s)", slot)
-            result = run_meta_monitor(force_send=False, dry_run=False)
+            result = run_meta_monitor(force_send=True, dry_run=False)
             logger.info(
                 "Scheduler Meta: sent=%s exit=%s motivo=%s",
                 result.sent,
@@ -74,7 +74,7 @@ def _run_scheduled_job(slot: str, sched: Dict) -> None:
                 run_google = True
         if run_google:
             logger.info("Scheduler: executando monitor Google (%s)", slot)
-            result = run_google_monitor(force_send=False, dry_run=False)
+            result = run_google_monitor(force_send=True, dry_run=False)
             logger.info(
                 "Scheduler Google: sent=%s exit=%s motivo=%s",
                 result.sent,

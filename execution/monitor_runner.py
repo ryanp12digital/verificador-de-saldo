@@ -202,9 +202,6 @@ def run_meta_monitor(
         style=style,
     )
 
-    if force_send:
-        message = "📣 *Envio manual / forcado*\n\n" + message
-
     if dry_run:
         return MonitorRunResult(
             platform="meta",
@@ -401,9 +398,6 @@ def run_google_monitor(
         now_str=now_str,
         style=style,
     )
-
-    if force_send:
-        message = "📣 *Envio manual / forcado*\n\n" + message
 
     if dry_run:
         return MonitorRunResult(

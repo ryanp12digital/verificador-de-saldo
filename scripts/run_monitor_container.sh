@@ -34,14 +34,16 @@ if [ "${META_ENABLED}" = "1" ]; then
   echo "📊 [META] Monitor Meta Ads"
   TZ="${TZ_VALUE}" python /app/execution/monitorar_saldo_meta_ads.py \
     --alert-threshold "${ALERT_THRESHOLD}" \
-    --near-threshold "${NEAR_THRESHOLD}" || EXIT=$?
+    --near-threshold "${NEAR_THRESHOLD}" \
+    --force-send || EXIT=$?
 fi
 
 if [ "${GOOGLE_ENABLED}" = "1" ]; then
   echo "📊 [GOOGLE] Monitor Google Ads"
   TZ="${TZ_VALUE}" python /app/execution/monitorar_saldo_google_ads.py \
     --alert-threshold "${ALERT_THRESHOLD}" \
-    --near-threshold "${NEAR_THRESHOLD}" || EXIT=$?
+    --near-threshold "${NEAR_THRESHOLD}" \
+    --force-send || EXIT=$?
 fi
 
 exit "${EXIT}"
